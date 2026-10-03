@@ -1,18 +1,22 @@
 <title>Roster</title>
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..800;1,400..600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@75..125,400..800&family=Newsreader:ital,wght@0,400..600;1,400..600&display=swap">
 <style>
 /*__STYLES__*/
 </style>
 <div id="app" class="app-root">
   <div class="boot">
     <div class="boot-mark">roster</div>
-    <div class="boot-sub">Finding your classes…</div>
+    <div class="boot-sub">Opening your classes…</div>
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/preact/standalone.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <script>
 /*__FLAGS__*/
+try { var t = localStorage.getItem("roster:theme"); t = t && JSON.parse(t); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
 /*__SCRIPTS__*/
 </script>

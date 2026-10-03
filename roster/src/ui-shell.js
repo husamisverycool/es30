@@ -64,7 +64,7 @@ function AppShell() {
   else if (view === "you") main = html`<${YouView} />`;
   else main = html`<${NowView} />`;
   const tabView = ["now", "classes", "calendar", "board", "people"].includes(view) ? view : view === "class" ? "classes" : null;
-  return html`<div class=${"shell" + (wide ? " wide" : "") + (view === "class" ? " in-class" : "")}>
+  return html`<div class=${"shell" + (wide ? " desk" : "") + (view === "class" ? " in-class" : "")}>
     ${app.banner}
     <div class="shell-body">
       ${wide ? html`<${Sidebar} view=${view} inboxN=${inboxN} />` : null}
@@ -111,7 +111,7 @@ function Sidebar({ view, inboxN }) {
   const item = (k, label, icon, n, cur) => html`<button class=${"nav-i" + (cur ? " on" : "")} onClick=${() => app.setRoute({ view: k })} aria-current=${cur ? "page" : undefined}><${Icon} name=${icon} size=${20} fill=${cur} /><span class="grow">${label}</span>${n ? html`<span class="nav-n">${n}</span>` : null}</button>`;
   return html`<aside class="sidebar" aria-label="Navigation">
     <div class="side-top">
-      <span class="wordmark">roster</span><span class="schoolchip"><i></i>Harvard · Fall 26</span>
+      <span class="wordmark">roster</span><span class="schoolchip"><i></i>Harvard</span>
       <span class="grow"></span>
       <button class="iconbtn" onClick=${() => app.open("palette", {})} aria-label="Search (⌘K)" title="Search  ⌘K"><${Icon} name="search" size=${20} /></button>
     </div>

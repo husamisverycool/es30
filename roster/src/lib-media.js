@@ -11,11 +11,11 @@ const Media = (() => {
   function loadImage(src) {
     return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
   }
-  async function compress(file) {
+  async function compress(file, opts) {
     const url = URL.createObjectURL(file);
     try {
       const img = await loadImage(url);
-      let side = 1280, q = 0.78, out = null, w = 0, h = 0;
+      let side = (opts && opts.max) || 1280, q = 0.78, out = null, w = 0, h = 0;
       for (let pass = 0; pass < 7; pass++) {
         const k = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
         w = Math.max(1, Math.round(img.naturalWidth * k)); h = Math.max(1, Math.round(img.naturalHeight * k));

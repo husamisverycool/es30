@@ -55,6 +55,8 @@ const Metrics = (() => {
       const placedIds = new Set(placed.map((s) => s.id));
       const inWin = events.filter((e) => e.ts >= c.start && e.ts < c.end && placedIds.has(e.by));
       const contributors = new Set(inWin.map((e) => e.by));
+      // Stricter reading: only people who wrote something (post, reply, fix, notes).
+      const writers = new Set(inWin.filter((e) => e.type === "post" || e.type === "reply" || e.type === "fix" || e.type === "note").map((e) => e.by));
       const posts = inWin.filter((e) => e.type === "post" || e.type === "reply");
       const sharesIn = inWin.filter((e) => (e.type === "post" || e.type === "reply" || e.type === "note") && isShare(e.msg));
       const perPoster = new Map();
@@ -80,6 +82,8 @@ const Metrics = (() => {
         placed: placed.length,
         contributors: contributors.size,
         rate: started ? rate : null,
+        writers: writers.size,
+        writerRate: started && placed.length ? writers.size / placed.length : null,
         studentMsgs: posts.length,
         posters: perPoster.size,
         top3Share: posts.length ? top3 / posts.length : null,
@@ -127,7 +131,7 @@ const Metrics = (() => {
   }
 
   // A pseudonymous log for the write-up: no names, no message text.
-  function csv({ courseId, members, messages, fixes, cycles, organizerIds }) {
+  function csv({ courseId, members, messages, fixes, cycles, organizerIds, checks, stuck, notes }) {
     const org = new Set(organizerIds || []);
     const alias = new Map();
     const nameOf = (uid) => {
@@ -140,19 +144,31 @@ const Metrics = (() => {
       const c = (cycles || []).find((c) => ts >= c.start && ts < c.end);
       return c ? c.label : "";
     };
-    const rows = [["timestamp_iso", "cycle", "member", "event", "thread", "chars", "has_link_or_file", "reply_to"]];
+    const rows = [["timestamp_iso", "cycle", "member", "event", "thread", "chars", "has_link_or_file", "target_id"]];
     const push = (ts, who, ev, thread, chars, share, reply) =>
       rows.push([new Date(ts).toISOString(), cycleOf(ts), nameOf(who), ev, thread || "", chars, share ? 1 : 0, reply || ""]);
     for (const m of messages) {
       if (m.deleted || !m.by) continue;
-      push(m.ts, m.by, m.kind === "recap" ? "recap" : m.replyTo ? "reply" : "post", m.thread, (m.text || "").length, isShare(m), m.replyTo ? m.replyTo.id : "");
+      const kind = m.kind === "recap" ? "recap" : m.kind === "announce" ? "announce" : m.kind === "poll" ? "poll" : m.kind === "event" ? "study_session" : m.kind === "photo" ? "photo" : m.replyTo ? "reply" : "post";
+      if (m.kind !== "system") push(m.ts, m.by, kind, m.thread, (m.text || "").length, isShare(m), typeof m.replyTo === "string" ? m.replyTo : m.replyTo ? m.replyTo.id : "");
       for (const [emoji, who] of Object.entries(m.reactions || {}))
         for (const [uid, ts] of Object.entries(who || {})) if (ts) push(ts, uid, "react " + emoji, m.thread, 0, false, m.id);
+      for (const [uid, v] of Object.entries((m.poll && m.poll.votes) || {})) if (v && v.o) push(v.t || m.ts, uid, "vote", m.thread, 0, false, m.id);
+      for (const [uid, v] of Object.entries((m.event && m.event.rsvps) || {})) if (v && v.s) push(v.t || m.ts, uid, "rsvp " + v.s, m.thread, 0, false, m.id);
     }
     for (const f of fixes) {
       push(f.ts, f.by, "correction", "recap", (f.text || "").length, false, f.recapId);
       for (const [uid, ts] of Object.entries(f.votes || {})) if (ts) push(ts, uid, "agree", "recap", 0, false, f.id);
+      for (const [uid, ts] of Object.entries(f.nays || {})) if (ts) push(ts, uid, "disagree", "recap", 0, false, f.id);
     }
+    for (const c of checks || []) push(c.ts, c.by, "check_line", "recap", 0, false, c.recapId);
+    for (const st of stuck || []) push(st.ts, st.by, "stuck", st.thread, 0, false, st.problem);
+    for (const n of notes || []) {
+      push(n.ts, n.by, "notes", "notes", (n.body || "").length, true, "");
+      for (const [uid, ts] of Object.entries(n.helpful || {})) if (ts) push(ts, uid, "helpful", "notes", 0, false, n.id);
+    }
+    // One "open" per person per day, so readers who never post still show up.
+    for (const m of members) for (const ts of Object.values((m.visits && m.visits[courseId]) || {})) if (ts && m.courses && m.courses[courseId]) push(ts, m.id, "open", "", 0, false, "");
     const header = rows.shift();
     rows.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
     rows.unshift(header);

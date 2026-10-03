@@ -8,15 +8,16 @@ const root = dirname(fileURLToPath(import.meta.url));
 const src = (f) => readFileSync(join(root, "src", f), "utf8");
 
 // Plain modules first; the UI modules run only once Preact + htm is present.
-const plain = ["store.js", "metrics.js", "runtime.js", "catalog.js", "demo.js", "icons.js"].map(src).join("\n\n");
-const ui = ["app-util.js", "app-chat.js", "app-recap.js", "app-hub.js", "app-org.js", "app-onboard.js", "app-main.js"].map(src).join("\n\n");
+const plain = ["store.js", "metrics.js", "runtime.js", "catalog.js", "lib-time.js", "lib-media.js", "lib-derive.js", "demo.js", "icons.js"].map(src).join("\n\n");
+// app-session.js goes last: it mounts the app once every component exists.
+const ui = ["ui-core.js", "ui-text.js", "ui-chat.js", "ui-recap.js", "ui-class.js", "ui-now.js", "ui-calendar.js", "ui-board.js", "ui-people.js", "ui-activity.js", "ui-sheets.js", "ui-onboard.js", "ui-org.js", "ui-shell.js", "app-session.js"].map(src).join("\n\n");
 const loader = `
 (function () {
   function fail() { var el = document.querySelector(".boot-sub"); if (el) el.textContent = "Roster couldn't load. Check your connection and reload."; }
   function go() { if (window.htmPreact) __rosterApp(); else fail(); }
   if (window.htmPreact) return go();
   var s = document.createElement("script");
-  s.src = "https://unpkg.com/htm@3.1.1/preact/standalone.umd.js";
+  s.src = "https://unpkg.com/htm@3.1.1/preact/standalone.umd.js"; // jsDelivr fallback
   s.onload = go; s.onerror = fail;
   document.head.appendChild(s);
 })();`;

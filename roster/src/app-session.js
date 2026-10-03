@@ -88,8 +88,10 @@ function Session({ rt, mode, switchMode }) {
   const [replyTo, setReplyTo] = useState(null);
   const [lrVersion, setLrVersion] = useState(0);
   const [arriving, setArriving] = useState(false);
-  const [route, setRouteState] = useState(() => ({ view: LS.get("roster:view:" + mode, "today"), courseId: LS.get("roster:last:" + mode, null), tab: "chat" }));
+  const [route, setRouteState] = useState(() => ({ view: LS.get("roster:view:" + mode, "now"), courseId: LS.get("roster:last:" + mode, null), tab: "chat" }));
   const [sheets, setSheets] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const [bannerOff, setBannerOff] = useState(() => LS.get("roster:banner:" + mode, 0) > Date.now() - 864e5);
   const presenceRef = useRef({ c: null, t: 0 });
 
   const membersById = useMemo(() => Object.fromEntries(members.map((m) => [m.id, m])), [members]);
@@ -191,7 +193,9 @@ function Session({ rt, mode, switchMode }) {
     switchMode: (m) => { LS.set("roster:mode", m); switchMode(m); },
     typing: (cid) => (demo ? [] : peers.filter((p) => !p.isMe && p.by && p.presence && p.presence.c === cid && p.presence.t && Date.now() - p.presence.t < 7000).map((p) => p.by)),
     setTyping: (cid, on) => pushPresence({ c: cid, t: on ? Date.now() : 0 }),
-    openCourse: (cid, tab) => { setRoute({ view: "class", courseId: cid, tab: tab || "chat", open: true }); setReplyTo(null); },
+    openCourse: (cid, tab, focus) => { setRoute({ view: "class", courseId: cid, tab: tab || "chat", open: true, focus: focus || null }); setReplyTo(null); setEditing(null); },
+    go: (tab) => setRoute({ tab }),
+    editing, setEditing,
 
     // ---- messages ----
     send: (cid, { text, thread, tags, mentions }) => {
@@ -238,7 +242,15 @@ function Session({ rt, mode, switchMode }) {
       const on = !!saved[cid + "~" + m.id];
       return write(() => (on ? ref.delete() : ref.set({ type: "saved", cid, mid: m.id, by: m.by, ts: now(), at: m.ts, kind: m.kind, text: m.text || (m.poll && m.poll.question) || (m.event && m.event.title) || "" })), on ? "Removed from Saved" : "Saved for later");
     },
-    report: (cid, m, reason, note) => write(() => db.collection("reports/" + uid + "/items").add({ cid, mid: m.id, author: m.by, reason, note: note || "", text: (m.text || "").slice(0, 300), ts: now() }), "Reported. Only the organizer sees reports."),
+    // reports/<you> holds your reports; only you and the organizer can read it.
+    report: async (cid, m, reason, note) => {
+      const ref = db.doc("reports/" + uid);
+      let prev = {};
+      try { const s = await ref.get(); if (s.exists) prev = s.data().items || {}; } catch (_) { /* first report */ }
+      const id = "r" + now().toString(36);
+      return write(() => ref.set({ items: { ...prev, [id]: { cid, mid: m.id, author: m.by, reason, note: note || "", text: (m.text || "").slice(0, 300), ts: now(), status: "open" } } }), "Reported. Only the organizer sees reports.");
+    },
+    resolveReport: (reporter, id, status) => write(() => db.doc("reports/" + reporter).update({ items: { [id]: { status, handledAt: now() } } }), status === "removed" ? "Removed and closed" : "Closed"),
 
     // ---- notes ----
     addNote: async (cid, n, file) => {
@@ -369,10 +381,16 @@ function Session({ rt, mode, switchMode }) {
     },
   };
   app.setArriving = setArriving;
+  // Mode strip (Slack's sandbox banner): honest about what's real.
+  app.banner = bannerOff ? null : demo
+    ? html`<div class="modebar"><span class="modebar-dot"></span><span class="grow"><b>Demo class.</b> Example classmates; what you post stays in this browser.</span>
+        ${rt.live && rt.canWrite !== false && !Notice.liveDenied ? html`<button onClick=${() => app.switchMode("live")}>Join the live class</button>` : null}
+        <button class="modebar-x" onClick=${() => { LS.set("roster:banner:" + mode, Date.now()); setBannerOff(true); }} aria-label="Hide for today"><${Icon} name="x" size=${14} /></button></div>`
+    : !canWrite ? html`<div class="modebar ro"><${Icon} name="eye" size=${14} /><span class="grow">You can read this class but not post.</span><button onClick=${() => app.switchMode("demo")}>Try the demo</button></div>` : null;
 
   let body;
   if (membersRaw === null || myDoc === null) body = html`<${BootScreen} />`;
-  else if (arriving || !myDoc || !Object.keys(myDoc.courses || {}).length) body = html`<${Onboarding} onDone=${(cid) => { setArriving(false); if (cid) app.openCourse(cid); else setRoute({ view: "today" }); }} />`;
+  else if (arriving || !myDoc || !Object.keys(myDoc.courses || {}).length) body = html`<${Onboarding} onDone=${(cid) => { setArriving(false); if (cid) app.openCourse(cid); else setRoute({ view: "now" }); }} />`;
   else body = html`<${AppShell} />`;
 
   return html`<${Ctx.Provider} value=${app}>

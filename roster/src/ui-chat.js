@@ -54,6 +54,13 @@ function MessageList({ courseId, messages, byId, lastRead, empty, header, recapC
     el.scrollIntoView({ block: "center", behavior: "smooth" });
     el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
   };
+  // Arriving from Activity, Saved or search: scroll to that message and flash it.
+  const focus = app.route.focus;
+  useEffect(() => {
+    if (!focus || !messages.some((m) => m.id === focus)) return;
+    const t = setTimeout(() => { flash(focus); app.setRoute({ focus: null }); }, 160);
+    return () => clearTimeout(t);
+  }, [focus, messages.length]);
   return html`<div class="scroller" ref=${scroller} onScroll=${onScroll}>
     <div class="msgs">
       ${header || null}
@@ -129,7 +136,7 @@ function CardMsg({ m, courseId, byId, flash, children }) {
   const p = app.person(m.by);
   return html`<div class=${"cardmsg" + (m.by === app.uid ? " mine" : "")} data-mid=${m.id}>
     <div class="cardmsg-h"><button class="run-av" onClick=${() => app.open("profile", { uid: m.by, courseId })}><${Avatar} uid=${m.by} size=${22} /></button>
-      <b style=${{ color: nameColor(m.by) }}>${m.by === app.uid ? "You" : p.name}</b><span class="tm">${relShort(m.ts)}</span>
+      <b>${m.by === app.uid ? "You" : p.name}</b><span class="tm">${relShort(m.ts)}</span>
       <span class="grow"></span>${(m.tags || []).map((t) => html`<span class="pchip">${prettyProblem(t)}</span>`)}
       <${MsgMenuButton} m=${m} courseId=${courseId} />
     </div>
@@ -171,7 +178,7 @@ function runAction(app, it, m, courseId, extra) {
   if (k === "copy") navigator.clipboard.writeText(m.text || "").then(() => app.toast("Copied"), () => app.toast("Copy isn't available here. Select the text instead."));
   if (k === "save") app.save(courseId, m);
   if (k === "resolve") app.resolveMsg(courseId, m);
-  if (k === "edit") extra && extra.edit ? extra.edit() : app.setEditing && app.setEditing({ courseId, m });
+  if (k === "edit") app.setEditing({ courseId, m: { ...m, thread: m.thread || "main" } });
   if (k === "profile") app.open("profile", { uid: m.by, courseId });
   if (k === "report") app.open("report", { courseId, m });
   if (k === "hide") app.hideMsg(courseId, m);
@@ -231,7 +238,7 @@ function Msg({ m, first, last, mine, person, courseId, byId, flash }) {
       onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp} onPointerCancel=${onPointerUp}
       onContextMenu=${(e) => { if (canAct && matchMedia("(hover: none)").matches) e.preventDefault(); }}
       onDblClick=${() => canAct && matchMedia("(hover: hover)").matches && app.setReplyTo(m)}>
-      ${first && !mine ? html`<div class="hd"><b style=${{ color: nameColor(m.by) }}>${person.name}</b>${tagLine(person) ? html`<span class="tag">${tagLine(person)}</span>` : null}<span class="tm" title=${dueWhen(m.ts)}>${relShort(m.ts)}</span></div>` : null}
+      ${first && !mine ? html`<div class="hd"><b>${person.name}</b>${tagLine(person) ? html`<span class="tag">${tagLine(person)}</span>` : null}<span class="tm" title=${dueWhen(m.ts)}>${relShort(m.ts)}</span></div>` : null}
       ${m.replyTo ? html`<button class="quote" style=${{ "--qc": reply ? nameColor(reply.by) : "var(--ink-3)" }} onClick=${() => flash(m.replyTo)}>
           <b>${reply ? (reply.by === app.uid ? "You" : app.person(reply.by).name) : "Earlier message"}</b><span>${reply ? (reply.deleted ? "Message deleted" : reply.kind === "photo" ? "📷 Photo" + (reply.text ? " · " + reply.text : "") : reply.text) : "Not loaded"}</span></button>` : null}
       ${m.kind === "photo" && m.image ? html`<button class="ph" onClick=${() => app.open("photo", { m, courseId })} style=${{ aspectRatio: (m.image.w || 4) + "/" + (m.image.h || 3) }} aria-label="Open photo"><img src=${Media.resolve(m.image.src)} alt=${m.text || "Photo"} loading="lazy" /></button>` : null}
@@ -305,7 +312,7 @@ function EventCard({ m, courseId, compact }) {
         <span class=${"time-chip" + (live ? " live" : "")}>${live ? html`<i class="pulse-dot"></i>` : null}${chip}</span>
         <b class="event-t">${ev.title}</b>
         <span class="event-w"><${Icon} name="pin" size=${14} />${ev.where}</span>
-        <span class="event-who">${going.length ? html`<${Faces} ids=${going} total=${going.length} size=${20} max=${4} /><span>${names.join(", ")}${going.length > 2 ? " and " + (going.length - 2) + " others" : ""} going${maybe.length ? " · " + maybe.length + " maybe" : ""}</span>` : html`<span>Be the first to say you're going</span>`}</span>
+        <span class="event-who">${going.length ? html`<${Faces} ids=${going} total=${going.length} size=${20} max=${4} /><span>${names.join(going.length === 2 ? " and " : ", ")}${going.length > 2 ? " and " + plural(going.length - 2, "other") : ""} going${maybe.length ? " · " + maybe.length + " maybe" : ""}</span>` : html`<span>Be the first to say you're going</span>`}</span>
       </span>
     </button>
     ${!past && app.canWrite ? html`<div class="rsvp" role="group" aria-label="RSVP">${RSVP.map(([k, e, l]) => html`<button key=${k} class=${mine && mine.s === k ? "on" : ""} aria-pressed=${!!(mine && mine.s === k)} onClick=${(ev2) => { const el = ev2.currentTarget; el.classList.remove("pulse"); void el.offsetWidth; el.classList.add("pulse"); app.rsvp(courseId, m, k); }}><span class="emo">${e}</span>${l}</button>`)}</div>` : null}
@@ -326,7 +333,7 @@ function DueCard({ m, courseId }) {
 }
 function AnnounceCard({ m }) {
   const app = useApp();
-  return html`<div class="announce" data-mid=${m.id}><span class="eyebrow">📣 From the organizer · ${relShort(m.ts)}</span><p><${RichText} text=${m.text} /></p></div>`;
+  return html`<div class="announce" data-mid=${m.id}><span class="eyebrow"><${Icon} name="megaphone" size=${14} />From the organizer · ${relShort(m.ts)}</span><p><${RichText} text=${m.text} /></p></div>`;
 }
 
 function TypingLine({ courseId }) {
@@ -345,7 +352,6 @@ function Composer({ courseId, thread, placeholder, problems, problem, onProblem,
   const [mentions, setMentions] = useState([]);
   const [suggest, setSuggest] = useState(null);
   const [sel, setSel] = useState(0);
-  const [editing, setEditing] = useState(null);
   const [probPop, setProbPop] = useState(null);
   const ta = useRef(null);
   const file = useRef(null);
@@ -354,15 +360,17 @@ function Composer({ courseId, thread, placeholder, problems, problem, onProblem,
   useEffect(() => { setText(LS.get(draftKey, "")); }, [draftKey]);
   useLayoutEffect(() => { const el = ta.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(150, el.scrollHeight) + "px"; } }, [text]);
   useEffect(() => { if (app.replyTo && ta.current) ta.current.focus(); }, [app.replyTo]);
-  useEffect(() => {
-    app.setEditing = ({ m }) => { setEditing(m); setText(m.text || ""); setTimeout(() => ta.current && ta.current.focus(), 0); };
-  });
+  // Editing lives in the session so a menu anywhere can start it (Telegram's edit bar).
+  const editing = app.editing && app.editing.courseId === courseId && app.editing.m.thread === thread ? app.editing.m : null;
+  const setEditing = (m) => app.setEditing(m ? { courseId, m } : null);
+  const editId = editing && editing.id;
+  useEffect(() => { if (editing) { setText(editing.text || ""); setTimeout(() => ta.current && ta.current.focus(), 0); } }, [editId]);
   if (!app.canWrite) {
     return html`<div class="composer-wrap"><div class="readonly"><${Icon} name="info" /><span class="grow">You can read this class but not post.${app.demo ? "" : " Ask the organizer to add you as a contributor."}</span>
       ${app.live ? html`<button class="btn sm soft" onClick=${() => app.switchMode("demo")}>Try the demo class</button>` : null}</div></div>`;
   }
   if (app.me && !app.me.pledgeAt) {
-    return html`<div class="composer-wrap"><button class="pledge-gate" onClick=${() => app.open("pledge")}><span class="emo">👋</span><span class="grow"><b>Take the Roster pledge to start talking.</b><small>You can read everything already.</small></span><span class="btn sm primary">Continue</span></button></div>`;
+    return html`<div class="composer-wrap"><button class="pledge-gate" onClick=${() => app.open("pledge")}><span class="pledge-ic"><${Icon} name="wave" size=${20} /></span><span class="grow"><b>Take the Roster pledge to start talking.</b><small>You can read everything already.</small></span><span class="btn sm primary">Continue</span></button></div>`;
   }
   const onInput = (e) => {
     const v = e.target.value;

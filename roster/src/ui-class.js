@@ -40,7 +40,8 @@ function ClassView({ courseId, tab, onBack }) {
   useEffect(() => { if (D.feed && active === "chat") app.markRead(courseId, "main"); }, [D.feed && D.feed.length, active]);
   const mainMsgs = useMemo(() => D.messages.filter((m) => (m.thread || "main") === "main"), [D.messages]);
 
-  return html`<div class="classview">
+  const look = courseLook(courseId);
+  return html`<div class="classview" style=${{ "--own": look.solid, "--own-tint": look.tint, "--own-text": look.text }}>
     <header class="classhead">
       <button class="iconbtn back" onClick=${onBack} aria-label="Back"><${Icon} name="chevronLeft" /></button>
       <button class="classhead-id" onClick=${() => app.go("people")}>
@@ -119,7 +120,7 @@ function PsetBoard({ courseId, D }) {
         placeholder=${"Ask about " + prettyProblem(problem)} hint=${left > 0 ? "Explain the idea, not the final answer." : null} />
     </div>`;
   }
-  return html`<div class="scroller"><div class="board">
+  return html`<div class="scroller"><div class="psetboard">
     <div class="psethero">
       <div class="grow"><span class="eyebrow">${t.title}</span><h3>Due ${dueWhen(t.due)}</h3><p class=${"due-tone " + dueLadder(t.due).tone}>${dueLadder(t.due).text}${dueLadder(t.due).sub ? " · " + dueLadder(t.due).sub : ""}</p></div>
       ${left > 0 && left < 2 * 864e5 ? html`<div class="bigcd"><small>ENDS IN</small><b class="tnum">${countdown(left)}</b></div>` : null}
@@ -132,7 +133,7 @@ function PsetBoard({ courseId, D }) {
         <span class="pchip lg">${prettyProblem(r.p)}</span>
         <span class="prob-body"><b>${r.qs[0] ? html`<${RichText} text=${r.qs[0].text} />` : "No questions yet"}</b>
           <small>${r.msgs.length ? plural(r.msgs.length, "message") + " · last " + relShort(r.last.ts) : "Be the first to ask"}</small></span>
-        <span class=${"status " + r.status}>${r.status === "answered" ? html`<${Icon} name="check" size=${12} />Answered` : r.status === "open" ? "Open" : ""}</span>
+        <span class=${"status s-" + r.status}>${r.status === "answered" ? html`<${Icon} name="check" size=${12} />Answered` : r.status === "open" ? "Open" : ""}</span>
       </button>
       ${app.canWrite ? html`<button class=${"stuck" + (r.mine ? " on" : "")} aria-pressed=${r.mine} onClick=${() => app.toggleStuck(courseId, t.id, r.p, r.mine)} title="I'm stuck too">↑ ${r.stuckers.length}<span class="sr"> stuck</span></button>` : html`<span class="stuck">↑ ${r.stuckers.length}</span>`}
     </div>`)}</div>
