@@ -7,7 +7,7 @@ const Catalog = (() => {
   const courses = [
     { id: "stat110", code: "STAT 110", title: "Introduction to Probability", who: "Joe Blitzstein", meets: "Tu Th 1:30–2:45 PM", where: "Sanders Theatre", size: 500, psets: "Weekly, due Fridays 5:00 PM on Gradescope" },
     { id: "lifesci1a", code: "LIFESCI 1A", title: "An Integrated Introduction to the Life Sciences: Chemistry, Molecular Biology, and Cell Biology", short: "Integrated Intro to the Life Sciences", who: "Daniel Kahne, Rachelle Gaudet", meets: "Lecture + weekly section and lab", where: "Science Center", size: 400, psets: "Weekly problem sets" },
-    { id: "expos20", code: "EXPOS 20", title: "Medicine and the Moral Imagination", who: "Preceptor-led seminar", meets: "Seminar of 15", where: "", size: 15, psets: "Three essays, each drafted and revised" },
+    { id: "expos20", code: "EXPOS 20", title: "Medicine and the Moral Imagination", who: "Preceptor-led seminar of 15", meets: "Tu Th 9:00–10:15 AM", where: "Memorial Hall", size: 15, psets: "Three essays, each drafted and revised" },
     { id: "gened1079", code: "GENED 1079", title: "Why Is There No Cure for Health?", who: "David Cutler", meets: "Tu Th 12:00–1:15 PM", where: "", size: 250, psets: "" },
     { id: "compsci50", code: "COMPSCI 50", title: "Introduction to Computer Science", who: "David J. Malan", meets: "", where: "Sanders Theatre", size: 600, psets: "Weekly problem sets" },
     { id: "econ10a", code: "ECON 10A", title: "Principles of Economics: Microeconomics", who: "", meets: "", where: "", size: 500, psets: "" },
@@ -40,6 +40,18 @@ const Catalog = (() => {
     return { id, code: id.toUpperCase(), title: "", who: "", meets: "", where: "", size: 0, psets: "" };
   }
 
+  // Section slots people pick from (any course); Stat 110 runs many weekly sections.
+  const SLOTS = [
+    { id: "m1800", label: "Mon 6:00 PM", d: [1], s: 1080, e: 1140 }, { id: "t1930", label: "Tue 7:30 PM", d: [2], s: 1170, e: 1230 },
+    { id: "w1630", label: "Wed 4:30 PM", d: [3], s: 990, e: 1050 }, { id: "w1930", label: "Wed 7:30 PM", d: [3], s: 1170, e: 1230 },
+    { id: "r1500", label: "Thu 3:00 PM", d: [4], s: 900, e: 1065 }, { id: "r1630", label: "Thu 4:30 PM", d: [4], s: 990, e: 1050 },
+    { id: "r1930", label: "Thu 7:30 PM", d: [4], s: 1170, e: 1230 }, { id: "f1030", label: "Fri 10:30 AM", d: [5], s: 630, e: 690 },
+  ];
+  const slot = (id) => SLOTS.find((x) => x.id === id);
+  // Hinge-style prompts, rewritten for a class.
+  const PROMPTS = ["I usually start the pset…", "Find me studying at…", "I can help with…", "I need help with…", "Ask me about…", "The concept that finally clicked…", "Hot take about this class…", "Study playlist on repeat…"];
+  const CONCENTRATIONS = ["African and African American Studies", "Anthropology", "Applied Mathematics", "Art, Film, and Visual Studies", "Astrophysics", "Biomedical Engineering", "Chemical and Physical Biology", "Chemistry", "Chemistry and Physics", "Classics", "Comparative Literature", "Comparative Study of Religion", "Computer Science", "Earth and Planetary Sciences", "East Asian Studies", "Economics", "Electrical Engineering", "Engineering Sciences", "English", "Environmental Science and Engineering", "Environmental Science and Public Policy", "Folklore and Mythology", "Germanic Languages and Literatures", "Government", "History", "History and Literature", "History and Science", "History of Art and Architecture", "Human Developmental and Regenerative Biology", "Human Evolutionary Biology", "Integrative Biology", "Linguistics", "Mathematics", "Mechanical Engineering", "Molecular and Cellular Biology", "Music", "Near Eastern Languages and Civilizations", "Neuroscience", "Philosophy", "Physics", "Psychology", "Romance Languages and Literatures", "Slavic Languages and Literatures", "Social Studies", "Sociology", "South Asian Studies", "Statistics", "Theater, Dance & Media", "Women, Gender, and Sexuality", "Undeclared"];
+
   const houses = ["Adams", "Cabot", "Currier", "Dunster", "Eliot", "Kirkland", "Leverett", "Lowell", "Mather", "Pforzheimer", "Quincy", "Winthrop", "Dudley", "First-year (Yard)"];
   const houseShort = { Pforzheimer: "Pfoho", "First-year (Yard)": "Yard" };
   const years = ["'27", "'28", "'29", "'30"];
@@ -53,5 +65,5 @@ const Catalog = (() => {
     { title: "Last day of classes", at: "2026-12-04T17:00:00-05:00", kind: "term" },
   ];
 
-  return { courses, byId, get, search, idFromCode, normalizeCode, houses, houseShort, years, termDates };
+  return { courses, byId, get, search, idFromCode, normalizeCode, houses, houseShort, years, termDates, SLOTS, slot, PROMPTS, CONCENTRATIONS };
 })();

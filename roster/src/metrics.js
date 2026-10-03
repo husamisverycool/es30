@@ -9,10 +9,10 @@
 // ---------------------------------------------------------------------------
 const Metrics = (() => {
   const URL_RE = /\bhttps?:\/\/\S+|\b(?:docs\.google|drive\.google|overleaf|notion\.so|canvas\.harvard|edstem)\S*/i;
-  const isShare = (m) => (m.attachments && m.attachments.length > 0) || URL_RE.test(m.text || "");
+  const isShare = (m) => m.kind === "photo" || (m.attachments && m.attachments.length > 0) || URL_RE.test(m.text || "");
   const verdict = (v, ok, kill) => (v == null ? "pending" : v >= ok ? "success" : v < kill ? "kill" : "revise");
 
-  function compute({ courseId, members, messages, fixes, recaps, cycles, organizerIds, now, checks }) {
+  function compute({ courseId, members, messages, fixes, recaps, cycles, organizerIds, now, checks, stuck, notes }) {
     const org = new Set(organizerIds || []);
     const t = now || Date.now();
     const students = members.filter((m) => !org.has(m.id) && m.courses && m.courses[courseId]);
@@ -20,7 +20,7 @@ const Metrics = (() => {
     // Every contribution event: who, when, what.
     const events = [];
     for (const m of messages) {
-      if (!m.by || org.has(m.by) || m.kind === "system" || m.kind === "recap" || m.deleted) continue;
+      if (!m.by || org.has(m.by) || m.kind === "system" || m.kind === "recap" || m.kind === "announce" || m.deleted) continue;
       events.push({ by: m.by, ts: m.ts, type: m.replyTo ? "reply" : "post", msg: m });
     }
     for (const m of messages) {
@@ -29,8 +29,12 @@ const Metrics = (() => {
           if (ts && !org.has(uid)) events.push({ by: uid, ts, type: "react", emoji });
         }
       }
-      for (const [uid, opt] of Object.entries((m.poll && m.poll.votes) || {})) {
-        if (opt && !org.has(uid)) events.push({ by: uid, ts: opt.ts || m.ts, type: "vote" });
+      // Poll votes and study-session RSVPs are one-tap responses, like a reaction.
+      for (const [uid, v] of Object.entries((m.poll && m.poll.votes) || {})) {
+        if (v && v.o && !org.has(uid)) events.push({ by: uid, ts: v.t || m.ts, type: "vote" });
+      }
+      for (const [uid, v] of Object.entries((m.event && m.event.rsvps) || {})) {
+        if (v && v.s && !org.has(uid)) events.push({ by: uid, ts: v.t || m.ts, type: "rsvp" });
       }
     }
     for (const f of fixes) {
@@ -39,7 +43,12 @@ const Metrics = (() => {
       for (const [uid, ts] of Object.entries(f.nays || {})) if (ts && !org.has(uid)) events.push({ by: uid, ts, type: "agree" });
     }
     // A "looks right" on a recap line is the same act as a 👍 on a summary in GroupMe.
-    for (const c of checks || []) if (!org.has(c.by)) events.push({ by: c.by, ts: c.ts, type: "react" });
+    for (const c of checks || []) if (!org.has(c.by)) events.push({ by: c.by, ts: c.ts, type: "check" });
+    for (const st of stuck || []) if (!org.has(st.by)) events.push({ by: st.by, ts: st.ts, type: "stuck" });
+    for (const n of notes || []) if (!org.has(n.by)) {
+      events.push({ by: n.by, ts: n.ts, type: "note", msg: { kind: "note", text: n.link || "", attachments: [{}] } });
+      for (const [uid, ts] of Object.entries(n.helpful || {})) if (ts && !org.has(uid)) events.push({ by: uid, ts, type: "check" });
+    }
 
     const cyc = (cycles || []).map((c) => {
       const placed = students.filter((s) => (s.courses[courseId] || Infinity) < c.end);
@@ -47,6 +56,7 @@ const Metrics = (() => {
       const inWin = events.filter((e) => e.ts >= c.start && e.ts < c.end && placedIds.has(e.by));
       const contributors = new Set(inWin.map((e) => e.by));
       const posts = inWin.filter((e) => e.type === "post" || e.type === "reply");
+      const sharesIn = inWin.filter((e) => (e.type === "post" || e.type === "reply" || e.type === "note") && isShare(e.msg));
       const perPoster = new Map();
       for (const e of posts) perPoster.set(e.by, (perPoster.get(e.by) || 0) + 1);
       const ranked = [...perPoster.values()].sort((a, b) => b - a);
@@ -58,7 +68,7 @@ const Metrics = (() => {
       }
       const lurkers = [...readers].filter((id) => !contributors.has(id)).length;
       const opened = new Set([...readers, ...contributors]).size;
-      const byType = { post: 0, reply: 0, react: 0, fix: 0, agree: 0, vote: 0 };
+      const byType = { post: 0, reply: 0, react: 0, fix: 0, agree: 0, vote: 0, rsvp: 0, check: 0, stuck: 0, note: 0 };
       for (const e of inWin) byType[e.type]++;
       const started = t >= c.start;
       const finished = t >= c.end;
@@ -77,7 +87,8 @@ const Metrics = (() => {
         opened,
         lurkers,
         byType,
-        shares: posts.filter((e) => isShare(e.msg)).length,
+        shares: sharesIn.length,
+        light: byType.react + byType.vote + byType.rsvp + byType.check + byType.stuck + byType.agree,
       };
     });
 
@@ -95,7 +106,7 @@ const Metrics = (() => {
         .reduce((n, f) => n + Object.values(f.votes || {}).filter(Boolean).length, 0),
     }));
 
-    const allShares = messages.filter((m) => m.by && !org.has(m.by) && !m.deleted && m.kind !== "system" && isShare(m));
+    const allShares = [...messages.filter((m) => m.by && !org.has(m.by) && !m.deleted && m.kind !== "system" && isShare(m)), ...(notes || []).filter((n) => !org.has(n.by))];
     const firstStart = cyc.length ? cyc[0].start : null;
     const weeks = firstStart ? Math.max(1, (Math.min(t, cyc[cyc.length - 1].end) - firstStart) / (7 * 864e5)) : 1;
 
