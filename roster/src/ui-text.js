@@ -4,6 +4,8 @@
 // Everything except KaTeX's own output is rendered as text nodes.
 // ---------------------------------------------------------------------------
 const URL_SPLIT = /(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g;
+const MATH_SPLIT = /((?<!\\)\$(?=\S)[^$\n]{1,200}?(?<=\S)\$(?!\d))/g;
+const MATH_ONE = /^\$(?=\S)[^$\n]{1,200}(?<=\S)\$$/;
 function MathSpan({ tex }) {
   const out = Media.mathHtml(tex);
   if (!out) return html`<code class="tex">${tex}</code>`;
@@ -26,9 +28,10 @@ function inlineParts(text, mentionNames, opts) {
   };
   String(text || "").split(URL_SPLIT).forEach((part, i) => {
     if (i % 2 === 1) { out.push(html`<a href=${part} target="_blank" rel="noopener noreferrer">${part.replace(/^https?:\/\/(www\.)?/, "")}</a>`); return; }
-    part.split(/(\$[^$\n]{1,200}\$)/g).forEach((seg) => {
-      if (/^\$[^$]+\$$/.test(seg)) out.push(html`<${MathSpan} tex=${seg.slice(1, -1)} />`);
-      else if (seg) pushEmphasis(seg);
+    // Pandoc's currency-safe rule: "$5 for pizza and $10 for drinks" stays text.
+    part.split(MATH_SPLIT).forEach((seg) => {
+      if (MATH_ONE.test(seg)) out.push(html`<${MathSpan} tex=${seg.slice(1, -1)} />`);
+      else if (seg) pushEmphasis(seg.replace(/\\\$/g, "$"));
     });
   });
   return out;
