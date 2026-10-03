@@ -211,7 +211,15 @@ const Demo = (() => {
   const agree = (list) => Object.fromEntries(list.map(([k, at]) => [R_(k), ET(at)]));
   FIXES[0].votes = agree([["nora", "2026-09-24T17:10"], ["dev", "2026-09-24T18:02"], ["maya", "2026-09-24T19:30"], ["kofi", "2026-09-24T20:11"]]);
   FIXES[1].votes = agree([["leila", "2026-09-29T20:02"]]);
-  FIXES[2].votes = agree([["leila", "2026-10-01T18:40"], ["dev", "2026-10-01T19:05"], ["maya", "2026-10-01T20:13"], ["sam", "2026-10-02T09:31"], ["jonah", "2026-10-02T12:48"]]);
+  // Two agree so far: the viewer's "Yes" is the third and applies the fix live.
+  FIXES[2].votes = agree([["leila", "2026-10-01T18:40"], ["dev", "2026-10-01T19:05"]]);
+
+  // "Looks right" checks on recap lines (one document per person per line).
+  const CHECKS = [
+    ["rc-l7", "b1", ["maya", "dev", "nora"]], ["rc-l7", "b3", ["sam", "mei"]], ["rc-l7", "b4", ["jonah", "ana", "kofi"]], ["rc-l7", "b5", ["leila", "zara"]],
+    ["rc-l8", "b1", ["maya", "theo", "ana"]], ["rc-l8", "b2", ["dev", "nora"]], ["rc-l8", "b3", ["kofi", "jonah"]], ["rc-l8", "b4", ["zara", "sam", "mei", "aiden"]],
+    ["rc-l9", "b1", ["nora", "maya"]], ["rc-l9", "b2", ["dev", "leila", "kofi"]], ["rc-l9", "b4", ["ana"]],
+  ];
 
   const threads = [
     ["pset4", { title: "PSet 4", kind: "pset", due: ET("2026-10-02T17:00"), problems: ["1", "2", "3", "4", "5", "6"], ts: ET("2026-09-25T17:00"), by: ORGANIZER }],
@@ -239,6 +247,7 @@ const Demo = (() => {
   };
 
   function members() {
+    const R = rng(29); // own stream, so a reset reseeds identically
     const out = [];
     let k = 0;
     for (const id of ids) {
@@ -267,6 +276,10 @@ const Demo = (() => {
     for (const [id, t] of threads) entries.push(["courses/stat110/threads/" + id, t]);
     for (const r of RECAPS) entries.push(["recaps/stat110/items/" + r.id, { ...r, by: ORGANIZER }]);
     for (const f of FIXES) entries.push(["courses/stat110/fixes/" + f.id, f]);
+    for (const [rid, bid, who] of CHECKS) {
+      const r = RECAPS.find((x) => x.id === rid);
+      who.forEach((k, j) => entries.push(["courses/stat110/checks/" + rid + "~" + bid + "~" + R_(k), { recapId: rid, bulletId: bid, by: R_(k), ts: r.ts + (j + 1) * 47 * 60e3 }]));
+    }
     entries.push(["hub/stat110", hub]);
     // A little life in the other courses so placement shows real counts.
     entries.push(["courses/lifesci1a/messages/x1", { by: R_("ana"), ts: ET("2026-10-03T10:12"), thread: "main", kind: "text", text: "is the ch 6 reading the whole chapter or just 6.1–6.3?", reactions: {} }]);

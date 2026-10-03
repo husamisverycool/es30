@@ -12,7 +12,7 @@ const Metrics = (() => {
   const isShare = (m) => (m.attachments && m.attachments.length > 0) || URL_RE.test(m.text || "");
   const verdict = (v, ok, kill) => (v == null ? "pending" : v >= ok ? "success" : v < kill ? "kill" : "revise");
 
-  function compute({ courseId, members, messages, fixes, recaps, cycles, organizerIds, now }) {
+  function compute({ courseId, members, messages, fixes, recaps, cycles, organizerIds, now, checks }) {
     const org = new Set(organizerIds || []);
     const t = now || Date.now();
     const students = members.filter((m) => !org.has(m.id) && m.courses && m.courses[courseId]);
@@ -20,7 +20,7 @@ const Metrics = (() => {
     // Every contribution event: who, when, what.
     const events = [];
     for (const m of messages) {
-      if (!m.by || org.has(m.by) || m.kind === "system" || m.deleted) continue;
+      if (!m.by || org.has(m.by) || m.kind === "system" || m.kind === "recap" || m.deleted) continue;
       events.push({ by: m.by, ts: m.ts, type: m.replyTo ? "reply" : "post", msg: m });
     }
     for (const m of messages) {
@@ -36,7 +36,10 @@ const Metrics = (() => {
     for (const f of fixes) {
       if (!org.has(f.by)) events.push({ by: f.by, ts: f.ts, type: "fix" });
       for (const [uid, ts] of Object.entries(f.votes || {})) if (ts && !org.has(uid)) events.push({ by: uid, ts, type: "agree" });
+      for (const [uid, ts] of Object.entries(f.nays || {})) if (ts && !org.has(uid)) events.push({ by: uid, ts, type: "agree" });
     }
+    // A "looks right" on a recap line is the same act as a 👍 on a summary in GroupMe.
+    for (const c of checks || []) if (!org.has(c.by)) events.push({ by: c.by, ts: c.ts, type: "react" });
 
     const cyc = (cycles || []).map((c) => {
       const placed = students.filter((s) => (s.courses[courseId] || Infinity) < c.end);
@@ -54,6 +57,7 @@ const Metrics = (() => {
         if (Object.values(v).some((ts) => ts >= c.start && ts < c.end)) readers.add(s.id);
       }
       const lurkers = [...readers].filter((id) => !contributors.has(id)).length;
+      const opened = new Set([...readers, ...contributors]).size;
       const byType = { post: 0, reply: 0, react: 0, fix: 0, agree: 0, vote: 0 };
       for (const e of inWin) byType[e.type]++;
       const started = t >= c.start;
@@ -70,6 +74,7 @@ const Metrics = (() => {
         posters: perPoster.size,
         top3Share: posts.length ? top3 / posts.length : null,
         readers: readers.size,
+        opened,
         lurkers,
         byType,
         shares: posts.filter((e) => isShare(e.msg)).length,
