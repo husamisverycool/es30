@@ -41,7 +41,7 @@ const MOCK = () => {
   };
   sample.limits = async () => ({ maxPromptBytes: 262144 });
   const user = {
-    me: async () => ({ id: UID, name: NAME, avatarUrl: "", color: "#555", email: null, isOwner: OWNER, canEdit: OWNER }),
+    me: async () => ({ id: UID, name: NAME, avatarUrl: "", color: "#555", email: q.get("email") || null, isOwner: OWNER, canEdit: OWNER }),
     id: async () => UID, isOwner: async () => OWNER, canEdit: async () => OWNER, can: async () => WRITE,
     profiles: async (ids) => Object.fromEntries([].concat(ids).map((id) => [id, { id, name: "", avatarUrl: "", color: "#8a8f98", email: null, isMe: id === UID, guest: false }])),
   };
@@ -60,153 +60,193 @@ const MOCK = () => {
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-await ctx.route("https://cdn.jsdelivr.net/**", (r) => r.fulfill({ path: VENDOR, contentType: "text/javascript" }));
-await ctx.route(/https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/, (r) => {
-  const url = r.request().url();
-  try { r.fulfill({ body: execFileSync("curl", ["-sS", "-A", "Mozilla/5.0 Chrome/130", url], { maxBuffer: 20e6 }), contentType: url.includes("googleapis") ? "text/css" : "font/woff2", headers: { "access-control-allow-origin": "*" } }); } catch (_) { r.abort(); }
-});
+await ctx.route("https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js", (r) => r.fulfill({ path: process.env.KATEX_JS, contentType: "text/javascript" }));
+await ctx.route("https://cdn.jsdelivr.net/npm/htm@3.1.1/**", (r) => r.fulfill({ path: VENDOR, contentType: "text/javascript" }));
+await ctx.route(/https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/, (r) => r.abort());
 await ctx.addInitScript(MOCK);
 const errors = [];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-async function open(qs) {
+async function open(qs, file) {
   const p = await ctx.newPage();
   p.on("pageerror", (e) => errors.push("pageerror: " + e.message));
-  p.on("console", (m) => { if (m.type() === "error") errors.push("console: " + m.text()); });
-  await p.goto("file://" + join(out, "index.html") + "?" + qs);
+  p.on("console", (m) => { if (m.type() === "error" && !/ERR_FAILED|net::/.test(m.text())) errors.push("console: " + m.text()); });
+  await p.goto("file://" + join(out, file || "index.html") + "?" + qs);
   return p;
 }
 const shot = (p, n) => p.screenshot({ path: join(out, n + ".png") });
 const check = (cond, msg) => { if (!cond) errors.push("CHECK FAILED: " + msg); else console.log("✓ " + msg); };
+const dbDump = (p) => p.evaluate(() => JSON.parse(localStorage.getItem("mock-live-db") || "[]"));
+const demoBar = (p) => p.locator(".modebar", { hasText: "Demo class" }).count();
+
+// Live onboarding: nothing is prefilled except what the account provides.
+async function onboard(p, { pick, year, house, placed }) {
+  await p.waitForSelector(".step-welcome");
+  await p.click("text=Get started");
+  await p.waitForSelector(".cres");
+  if (!placed) { await p.fill("#course-q", pick); await p.locator(".cres", { hasText: "STAT 110" }).click(); }
+  await p.click(".ob-cta button.primary"); // classes
+  await p.waitForSelector(".verify");
+  await p.click(".ob-cta button.primary"); // verify
+  await p.waitForSelector("#ob-name");
+  await p.click(".ob-cta button.primary"); // name
+  await p.click(".seg.wide >> text=20" + year.slice(1));
+  await p.click(".housechip >> text=" + house);
+  await p.click(".ob-cta button.primary"); // house
+  await p.click(".concpick .chip >> text=Undeclared");
+  await p.click(".ob-cta button.primary"); // conc
+  await p.click(".ob-cta button.primary"); // sections
+  await p.click(".ob-cta button.primary"); // prompts (skip)
+  await p.click("text=Agree and continue");
+  await p.waitForSelector(".step-friends");
+  await p.click(".ob-cta button.primary"); // friends
+}
 
 // ---- organizer sets up the class --------------------------------------------
-const A = await open("uid=u_owner&name=Org%20Anizer&owner=1");
-await A.waitForSelector(".ob-card");
-check(!(await A.locator(".banner", { hasText: "Demo class" }).count()), "owner lands in the live class, not the demo");
-await A.click("text=Add my classes");
-await A.fill("#course-q", "stat 110");
-await A.locator(".result", { hasText: "STAT 110" }).click();
-await A.click("text=Continue with 1 class");
-await A.fill("#ob-name", "Org Anizer");
-await A.selectOption("#ob-house", "Lowell");
-await A.click("text=Join my class chats");
-await A.waitForSelector(".arrive-row");
-check((await A.locator(".arrive-row", { hasText: "first one here" }).count()) === 1, "arrival says first one here in an empty class");
-await A.click("text=Open STAT 110");
-await A.waitForSelector(".empty");
-await shot(A, "a1-empty-chat");
+const A = await open("uid=u_owner&name=Org%20Anizer&owner=1&email=org@college.harvard.edu");
+await A.waitForSelector(".step-welcome");
+check(!(await demoBar(A)), "owner lands in the live class, not the demo");
+await onboard(A, { pick: "stat 110", year: "'28", house: "Lowell" });
+await A.waitForSelector(".step-arrive", { timeout: 15000 });
+check((await A.locator(".arrive-row", { hasText: "first one here" }).count()) >= 1, "arrival says first one here in an empty class");
+check((await A.locator(".arrive-row", { hasText: "Lowell" }).count()) === 1, "organizer is placed in their House chat too");
+await A.click("text=Say hi in STAT 110");
+await A.waitForSelector(".classview");
+await shot(A, "a1-first-chat");
 await A.click('button[aria-label="Organizer tools"]');
-await A.locator(".seg-ctl button", { hasText: "Dates & cycles" }).click();
-await A.waitForSelector("#hub-rules");
+await A.click(".tabs.inset >> text=Dates");
 await A.click("text=Add a date");
-await A.fill("#due-t-0", "PSet 6");
-await A.fill("#due-a-0", "2026-10-23T17:00");
-await A.fill("#due-w-0", "Gradescope");
+const due = A.locator(".dcard").first().locator(".erow").first().locator("input");
+await due.nth(0).fill("PSet 6"); await due.nth(1).fill("2026-10-23T17:00"); await due.nth(2).fill("Gradescope");
 await A.click("text=Save dates & cycles");
 await wait(300);
-await A.fill("#nt-title", "PSet 6");
-await A.fill("#nt-due", "2026-10-23T17:00");
-await A.fill("#nt-problems", "1, 2, 3a, 3b, 4");
-await A.locator("button", { hasText: /^Add$/ }).click();
+const nt = A.locator(".dcard").last().locator(".erow").last().locator("input");
+await nt.nth(0).fill("PSet 6"); await nt.nth(1).fill("2026-10-23T17:00"); await nt.nth(2).fill("1, 2, 3a, 3b, 4");
+await A.locator(".dcard").last().locator("button", { hasText: /^Add$/ }).click();
 await wait(300);
-await shot(A, "a2-hub-editor");
-await A.locator(".seg-ctl button", { hasText: "Post a recap" }).click();
-await A.fill("#rc-notes", "Lecture 10. Indicator r.v.s, fundamental bridge E[I_A]=P(A). Matching problem expected matches = 1. Birthday pairs C(n,2)/365. LOTUS. Slides 2, 6, 9, 13.");
+check((await dbDump(A)).some(([p, d]) => p.startsWith("courses/stat110/threads/") && d.problems.length === 5), "PSet board saved with 5 problems");
+await shot(A, "a2-dates");
+await A.click(".tabs.inset >> text=Recap");
+await A.fill(".dash textarea", "Lecture 10. Indicator r.v.s, fundamental bridge E[I_A]=P(A). Matching problem expected matches = 1. Birthday pairs C(n,2)/365. LOTUS. Slides 2, 6, 9, 13.");
 await A.click("text=Draft with Claude");
-await A.waitForSelector("#rc-b-0");
-check((await A.inputValue("#rc-title")) === "Indicators & the Fundamental Bridge", "Claude draft fills the title");
+await A.waitForSelector(".draftlist");
+check((await A.locator(".field-row.four input").nth(2).inputValue()) === "Indicators & the Fundamental Bridge", "Claude draft fills the title");
 check(await A.evaluate(() => /Use ONLY the organizer's notes/.test(window.__prompt)), "prompt tells Claude to use only the notes");
-await shot(A, "a3-recap-draft");
+check(await A.locator("button", { hasText: /^Review 4 lines first$/ }).isDisabled(), "can't post until every drafted line is reviewed");
+for (let i = 0; i < 3; i++) await A.locator(".dl").nth(i).locator("button", { hasText: "Keep" }).click();
+await A.locator(".dl").nth(3).locator("button", { hasText: "Remove" }).click();
+await shot(A, "a3-recap-review");
 await A.click("text=Post recap to STAT 110");
 await A.waitForSelector(".recap");
+check((await A.locator(".recap .line").count()) === 3, "removed line isn't posted");
+await A.click('button[aria-label="Organizer tools"]');
+await A.click(".tabs.inset >> text=Placement");
+await A.fill(".dash textarea", "Name, Email\nSam Student, sam@college.harvard.edu\n");
+await A.click("text=Place 1 student");
+await wait(400);
+check((await dbDump(A)).some(([p, d]) => p.startsWith("placements/") && d.courses.includes("stat110") && !JSON.stringify(d).includes("sam@")), "placement stored as a hash, without the address");
 await shot(A, "a4-recap-posted");
-check(await A.locator(".chat-head .s", { hasText: "typing" }).count() === 0 || true, "typing line renders");
-await wait(500);
 await A.close();
 
-// ---- a student joins ----------------------------------------------------------
-const B = await open("uid=u_s1&name=Sam%20Student&owner=0");
-await B.waitForSelector(".ob-card");
-await B.click("text=Add my classes");
-check((await B.locator(".result", { hasText: "STAT 110" }).locator(".stack .count").innerText()) === "1", "course picker shows 1 classmate already in STAT 110");
-await B.locator(".result", { hasText: "STAT 110" }).click();
-await B.click("text=Continue with 1 class");
-await B.click("text=Join my class chats");
-await B.waitForSelector(".arrive-row");
-await B.click("text=Open STAT 110");
+// ---- a placed student joins ------------------------------------------------------
+const B = await open("uid=u_s1&name=Sam%20Student&owner=0&email=sam@college.harvard.edu");
+await B.waitForSelector(".step-welcome");
+await B.click("text=Get started");
+await B.waitForSelector(".ob-banner");
+check((await B.locator(".ob-banner", { hasText: "added you to STAT 110" }).count()) === 1, "placed student sees they were added to STAT 110");
+check((await B.locator(".pickchip", { hasText: "STAT 110" }).count()) === 1, "STAT 110 is preselected from the placement");
+check((await B.locator(".cres", { hasText: "STAT 110" }).locator(".cres-who").innerText()).includes("1 on Roster"), "course picker shows 1 classmate already in STAT 110");
+await B.click("text=Back").catch(() => {});
+await B.goto(B.url());
+await onboard(B, { placed: true, year: "'29", house: "Pforzheimer" });
+await B.waitForSelector(".step-arrive", { timeout: 15000 });
+await B.click("text=Say hi in STAT 110");
 await B.waitForSelector(".recap");
 check(!(await B.locator('button[aria-label="Organizer tools"]').count()), "students don't see organizer tools");
-await B.fill("#composer-stat110-main", "hi! is anyone else starting pset 6 early https://stat110.hsites.harvard.edu");
-await B.keyboard.press("Enter");
+const box = B.locator("textarea[id^='composer-stat110-main']");
+check((await box.inputValue()).startsWith("Hi! I'm Sam"), "intro message is prefilled");
+await box.fill("hi! is anyone else starting pset 6 early https://stat110.hsites.harvard.edu");
+await box.press("Enter");
 await wait(300);
-await B.locator(".bl .act button", { hasText: "Looks right" }).first().click();
+await B.locator(".line-acts button", { hasText: "Looks right" }).first().click();
 await wait(200);
-await B.locator(".bl .act button", { hasText: "Suggest a fix" }).nth(1).click();
+await B.locator(".line-acts button", { hasText: "Fix" }).nth(1).click();
+await B.click(".chip >> text=Missing a step");
 await B.fill("#fix-text", "Matching problem: the expected number of matches is 1 for every n, by linearity over indicators.");
 await B.click("text=Suggest fix");
 await wait(300);
 await B.click(".tab >> text=PSet 6");
-await B.locator(".ptab", { hasText: "3(b)" }).click();
-await B.fill("#composer-stat110-pset6-" + "x", "").catch(() => {});
+await B.locator(".prob-main", { hasText: "3(b)" }).click();
 const psetBox = B.locator("textarea[id^='composer-stat110-pset6']");
 await psetBox.fill("for 3(b) is a closed form expected?");
 await psetBox.press("Enter");
 await wait(300);
 await shot(B, "b1-student-pset");
-check((await B.locator(".bub .ptag", { hasText: "3(b)" }).count()) >= 1, "pset message carries the 3(b) tag");
+check((await B.locator(".bub .pchip", { hasText: "3(b)" }).count()) >= 1, "pset message carries the 3(b) tag");
 await B.click(".tab >> text=Chat");
-await wait(300);
-await shot(B, "b2-student-chat");
-check(await B.evaluate(() => JSON.parse(localStorage.getItem("mock-live-db")).some(([p, d]) => p === "members/u_s1" && Object.keys(d.visits || {}).length)), "student's open is logged once for the day");
+await B.click(".cbtn");
+await B.click(".attach-o >> text=Study session");
+await B.fill(".sheet input.lg", "PSet 6 early start");
+await B.click(".sheet .chip >> text=Cabot Library");
+await B.click("text=Post to STAT 110");
 await wait(400);
+check((await dbDump(B)).some(([p, d]) => p.startsWith("courses/stat110/messages/") && d.kind === "event" && d.event.rsvps.u_s1.s === "going"), "study session posted with its host going");
+await B.click(".nav-i >> text=Board");
+await B.click(".pagehead >> text=Post");
+await B.click(".catopt >> text=Marketplace");
+await B.fill(".sheet input.lg", "Selling: Stat 110 textbook");
+await B.fill(".sheet input[inputmode=decimal]", "20");
+await B.click(".sheet-f >> text=Post");
+await wait(400);
+check((await dbDump(B)).some(([p, d]) => p.startsWith("board/") && d.price === "$20"), "board post saved with a price");
+await shot(B, "b2-board");
+check((await dbDump(B)).some(([p, d]) => p === "members/u_s1" && Object.keys(d.visits || {}).length && d.verified === "harvard.edu" && d.pledgeAt), "student's open, verification and pledge are recorded");
 await B.close();
 
 // ---- organizer reads the results ----------------------------------------------
-const A2 = await open("uid=u_owner&name=Org%20Anizer&owner=1");
-await A2.waitForSelector(".bub, .recap");
+const A2 = await open("uid=u_owner&name=Org%20Anizer&owner=1&email=org@college.harvard.edu");
+await A2.waitForSelector(".classview, .page");
+await A2.click(".side-c >> text=STAT 110");
 await A2.click('button[aria-label="Organizer tools"]');
-await wait(500);
+await A2.waitForSelector(".kpis");
 await shot(A2, "c1-results");
 const txt = await A2.locator(".dash").innerText();
 check(/1 students placed/.test(txt), "results count 1 placed student (organizer excluded)");
-await A2.locator(".seg-ctl button", { hasText: "Export" }).click();
-await A2.waitForSelector("text=Chat log · CSV");
-await A2.click("text=Chat log · CSV");
+await A2.click(".tabs.inset >> text=Export");
+await A2.waitForSelector("text=Event log · CSV");
+await A2.click("text=Event log · CSV");
 await wait(200);
 const saved = await A2.evaluate(() => window.__saved);
-console.log("saved:", JSON.stringify(saved), "toasts:", await A2.locator(".toast").allInnerTexts());
 check(saved && saved.filename.endsWith(".csv") && /timestamp_iso/.test(saved.head), "CSV export goes through downloads.save");
 check(saved && !/Sam Student/.test(saved.head), "CSV has no names");
-await shot(A2, "c2-export");
+await A2.keyboard.press("Escape");
+await A2.click(".nav-i >> text=Activity");
+await wait(300);
+await shot(A2, "c2-activity");
 await A2.close();
 
 // ---- a view-only visitor gets the demo -----------------------------------------
 const C = await open("uid=u_v&name=Visitor&owner=0&write=0");
-await C.waitForSelector(".ob-card");
-check((await C.locator(".banner", { hasText: "Demo class" }).count()) === 1, "view-only visitor lands in the demo class");
-check(!(await C.locator("button", { hasText: "Live class" }).count()), "view-only visitor isn't offered the live class");
+await C.waitForSelector(".step-welcome");
+check((await demoBar(C)) === 1, "view-only visitor lands in the demo class");
+check(!(await C.locator(".modebar button", { hasText: "Join the live class" }).count()), "view-only visitor isn't offered the live class");
 await C.close();
 
 // ---- an outside viewer the platform says nothing about, whose writes are refused --
 const D = await open("uid=u_out&name=Outside&owner=0&write=null&deny=1");
-await D.waitForSelector(".ob-card");
-check(!(await D.locator(".banner", { hasText: "Demo class" }).count()), "unknown-permission visitor starts in live");
+await D.waitForSelector(".step-welcome");
+check(!(await demoBar(D)), "unknown-permission visitor starts in live");
 check((await D.locator("button", { hasText: "Just looking? Open the demo class" }).count()) === 1, "live welcome offers the demo class");
-await D.click("text=Add my classes");
-await D.locator(".result", { hasText: "STAT 110" }).click();
-await D.click("text=Continue with 1 class");
-await D.click("text=Join my class chats");
-await D.waitForSelector(".banner >> text=Demo class");
-await wait(500);
+await onboard(D, { pick: "stat 110", year: "'29", house: "Cabot" });
+await D.waitForSelector(".modebar >> text=Demo class", { timeout: 15000 });
+await wait(600);
 check((await D.locator(".toast", { hasText: "demo class instead" }).count()) === 1, "refused join falls back to the demo with a notice");
-check(!(await D.locator("button", { hasText: "Live class" }).count()), "after a refusal the live class isn't offered again");
+check(!(await D.locator(".modebar button", { hasText: "Join the live class" }).count()), "after a refusal the live class isn't offered again");
 await D.close();
 
 // ---- the public demo build never touches the shared store ----------------------------
-const E = await ctx.newPage();
-E.on("pageerror", (e) => errors.push("pageerror: " + e.message));
-await E.goto("file://" + join(out, "demo.html") + "?uid=u_owner&name=Org&owner=1");
-await E.waitForSelector(".ob-card");
-check((await E.locator(".banner", { hasText: "Demo class" }).count()) === 1, "demo build opens the demo class even for the owner");
+const E = await open("uid=u_owner&name=Org&owner=1", "demo.html");
+await E.waitForSelector(".step-welcome");
+check((await demoBar(E)) === 1, "demo build opens the demo class even for the owner");
 check(!(await E.evaluate(() => !!window.__dbAsked)), "demo build never asks for the shared database");
 check((await E.title()) === "Roster Demo Class", "demo build has its own title");
 await E.close();

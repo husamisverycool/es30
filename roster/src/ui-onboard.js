@@ -105,6 +105,9 @@ function Onboarding({ onDone }) {
   const [sections, setSections] = useState(demo ? PRIYA.sections : {});
   const [prompts, setPrompts] = useState(demo ? PRIYA.prompts : []);
   const [following, setFollowing] = useState({});
+  // The placement lookup can land after this screen mounts; preselect once it does.
+  const placedKey = placed.map((p) => p.id).join(",");
+  useEffect(() => { if (placedKey) setPicked((cur) => [...cur, ...placed.filter((p) => !cur.some((c) => c.id === p.id))]); }, [placedKey]);
   const [built, setBuilt] = useState(0);
   const [failed, setFailed] = useState(false);
   const email = demo ? "priya_raman@college.harvard.edu" : app.viewerEmail || "";

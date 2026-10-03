@@ -131,7 +131,7 @@ function PsetBoard({ courseId, D }) {
     <div class="probs">${sorted.map((r) => html`<div class=${"prob" + (r.fresh ? " fresh" : "")} key=${r.p}>
       <button class="prob-main" onClick=${() => setProblem(r.p)}>
         <span class="pchip lg">${prettyProblem(r.p)}</span>
-        <span class="prob-body"><b>${r.qs[0] ? html`<${RichText} text=${r.qs[0].text} />` : "No questions yet"}</b>
+        <span class="prob-body"><b>${r.qs[0] || r.msgs[0] ? html`${(r.qs[0] || r.msgs[0]).kind === "photo" ? "📷 " : ""}<${RichText} text=${(r.qs[0] || r.msgs[0]).text || "Photo"} />` : "No questions yet"}</b>
           <small>${r.msgs.length ? plural(r.msgs.length, "message") + " · last " + relShort(r.last.ts) : "Be the first to ask"}</small></span>
         <span class=${"status s-" + r.status}>${r.status === "answered" ? html`<${Icon} name="check" size=${12} />Answered` : r.status === "open" ? "Open" : ""}</span>
       </button>

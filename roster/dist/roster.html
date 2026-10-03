@@ -351,7 +351,7 @@ select.input { padding-right: 34px; background-image: url("data:image/svg+xml,%3
 .main > * { flex: 1; min-height: 0; }
 .page { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .scroller { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; position: relative; }
-.page-in { max-width: 720px; margin: 0 auto; padding: 4px 16px calc(var(--tabbar-h) + 40px + env(safe-area-inset-bottom)); display: grid; gap: 28px; align-content: start; }
+.page-in { grid-template-columns: minmax(0, 1fr); max-width: 720px; margin: 0 auto; padding: 4px 16px calc(var(--tabbar-h) + 40px + env(safe-area-inset-bottom)); display: grid; gap: 28px; align-content: start; }
 .desk .page-in { padding: 4px 32px 56px; max-width: 760px; }
 .pagehead { display: flex; align-items: flex-end; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 12px; max-width: 752px; width: 100%; margin: 0 auto; }
 .desk .pagehead { padding: 28px 32px 14px; max-width: 760px; }
@@ -560,8 +560,8 @@ select.input { padding-right: 34px; background-image: url("data:image/svg+xml,%3
 .prof-id h2 { font: var(--t-title1); letter-spacing: var(--tr-title1); margin-top: 4px; }
 .prof-status { font: var(--t-subhead); color: var(--ink); background: var(--surface); border-radius: var(--r-pill); padding: 5px 12px; }
 .prof-status small { color: var(--ink-2); }
-.vitals { display: flex; justify-content: center; flex-wrap: wrap; gap: 0; background: var(--surface); border-radius: var(--r-lg); padding: 4px 0; }
-.vitals > span { display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; font: var(--t-subhead); }
+.vitals { display: flex; justify-content: safe center; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 0; background: var(--surface); border-radius: var(--r-lg); padding: 4px 0; }
+.vitals > span { white-space: nowrap; flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; font: var(--t-subhead); }
 .vitals > span + span { border-left: .5px solid var(--separator); }
 .vitals .ic { color: var(--ink-2); }
 .prof-acts { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
@@ -649,7 +649,7 @@ select.input { padding-right: 34px; background-image: url("data:image/svg+xml,%3
 .msgs { display: flex; flex-direction: column; padding: 12px 12px 16px; max-width: 860px; margin: 0 auto; width: 100%; }
 .desk .msgs { padding: 16px 20px 20px; }
 .daysep { display: flex; justify-content: center; margin: 14px 0 10px; position: sticky; top: 6px; z-index: 2; pointer-events: none; }
-.daysep span { padding: 4px 10px; border-radius: var(--r-pill); background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-edge); font: 600 12px/16px var(--font-sans); color: var(--ink-2); }
+.daysep span { padding: 4px 10px; border-radius: var(--r-pill); background: var(--surface); box-shadow: var(--shadow-float) !important; -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-edge); font: 600 12px/16px var(--font-sans); color: var(--ink-2); }
 .unread-div { display: flex; align-items: center; gap: 10px; margin: 12px 0 8px; color: var(--school-text); font: 600 12px/16px var(--font-sans); }
 .unread-div::before, .unread-div::after { content: ""; flex: 1; height: .5px; background: var(--school-text); opacity: .6; }
 .sysline { align-self: center; text-align: center; max-width: 440px; margin: 8px auto; font: var(--t-footnote); color: var(--ink-2); }
@@ -1012,7 +1012,7 @@ select.input { padding-right: 34px; background-image: url("data:image/svg+xml,%3
 .mtrow-t b { display: block; font: var(--t-headline); }
 .mtrow-t small { display: block; font: var(--t-footnote); color: var(--ink-2); margin-top: 1px; }
 .daypick { display: flex; gap: 6px; }
-.daychip { flex: 1; height: 40px; border-radius: var(--r-pill); background: var(--surface); box-shadow: inset 0 0 0 .5px var(--separator); font: 600 15px/1 var(--font-sans); }
+.daychip { flex: 1; text-align: center; height: 40px; border-radius: var(--r-pill); background: var(--surface); box-shadow: inset 0 0 0 .5px var(--separator); font: 600 15px/1 var(--font-sans); }
 .daychip.on { background: var(--ink); color: var(--surface); box-shadow: none; }
 
 /* ---- board --------------------------------------------------------------------------------------- */
@@ -1098,7 +1098,6 @@ select.input { padding-right: 34px; background-image: url("data:image/svg+xml,%3
 .tray.compact { display: flex; justify-content: center; padding: 6px 0 10px; }
 .tray.compact .tray-row { padding: 4px; border-radius: var(--r-pill); background: var(--surface); box-shadow: var(--shadow-float); }
 .toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabbar-h) + 24px + env(safe-area-inset-bottom)); display: grid; gap: 8px; justify-items: center; z-index: 400; pointer-events: none; width: calc(100% - 32px); max-width: 460px; }
-.desk ~ .toasts, .ob ~ .toasts { bottom: 24px; }
 .toast { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 10px 10px 10px 18px; border-radius: var(--r-pill); background: var(--ink); color: var(--surface); box-shadow: var(--shadow-overlay); font: 500 14px/19px var(--font-sans); pointer-events: auto; animation: toastin var(--dur-medium) var(--ease-pop); }
 .toast button { font-weight: 700; padding: 6px 10px; border-radius: var(--r-pill); color: var(--surface); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .4); }
 @keyframes toastin { from { opacity: 0; transform: translateY(12px) scale(.96); } }
@@ -1429,6 +1428,16 @@ select.input { padding-right: 34px; background-image: url("data:image/svg+xml,%3
 .page-in .event, .page-in .poll { background: var(--surface); }
 .page-in .event .datetile, .page-in .event .rsvp button:not(.on) { background: var(--bg); box-shadow: none; }
 .desk .tgrid { margin-left: 24px; }
+
+/* Phone nav bar: actions on their own row above the large title (iOS large-title nav bar). */
+@media (max-width: 1023px) {
+  .pagehead { flex-direction: column; align-items: stretch; gap: 0; padding-top: calc(4px + env(safe-area-inset-top)); padding-bottom: 10px; }
+  .pagehead-a { order: -1; justify-content: flex-end; min-height: 44px; padding-bottom: 0; }
+  .pagehead h1 { white-space: normal; }
+}
+.desk .chiprow { flex-wrap: wrap; overflow: visible; }
+.desk ~ .toasts { left: auto; right: 32px; transform: none; bottom: 96px; justify-items: end; width: auto; }
+.ob ~ .toasts { bottom: 110px; }
 
 </style>
 <div id="app" class="app-root">
@@ -2627,6 +2636,8 @@ const Demo = (() => {
     { id: "b-book", by: "leila", ts: "2026-10-02T12:05", cat: "market", title: "Selling: Blitzstein & Hwang, 2nd edition", body: "Hardcover, a few highlights in ch. 1–3. The PDF is free too, but some people like paper.", price: "$25" },
     { id: "b-lost", by: "jonah", ts: "2026-10-01T15:10", cat: "lost", title: "Lost: navy Hydro Flask with a Mather sticker", body: "Left it in Sanders after Thursday's Stat 110 lecture, row M. Would love it back." },
     { id: "b-ls1a", by: "mei", ts: "2026-10-03T09:30", cat: "study", title: "LS 1a ch. 6 study group", body: "Protein folding problems before the pset is due. All levels.", event: { at: "2026-10-05T20:00", end: "2026-10-05T22:00", where: "Pfoho dining hall" }, going: ["ana"], maybe: ["aiden"] },
+    { id: "b-calc", by: "kofi", ts: "2026-10-02T19:30", cat: "market", title: "TI-84 Plus CE, barely used", body: "Comes with the charging cable. Pick up in Dunster.", price: "$60" },
+    { id: "b-lamp", by: "nora", ts: "2026-10-03T08:15", cat: "market", title: "Free: desk lamp and a small whiteboard", body: "Moving rooms this weekend. First come, first served, Currier.", price: "Free" },
     { id: "b-trucks", by: "zara", ts: "2026-10-03T11:45", cat: "general", title: "Food trucks on the Science Center Plaza today", body: "The dumpling one is back. Line's short before 12:15." },
     { id: "b-run", by: "dev", ts: "2026-10-02T07:40", cat: "event", title: "Charles River 5K, easy pace", body: "Meeting at Weld Boathouse, back by 9. No one gets left behind.", event: { at: "2026-10-04T08:00", end: "2026-10-04T09:00", where: "Weld Boathouse" }, going: ["maya", "theo"], maybe: ["nora"] },
   ];
@@ -2699,6 +2710,7 @@ const Demo = (() => {
     L("house-pforzheimer", "h2", "mei", "2026-10-03T15:30", "the shuttle was 20 min late again this morning, almost missed stat 110", { replyTo: "h1" });
     L("house-pforzheimer", "h3", "aiden", "2026-10-03T15:41", "the quad express is so unpredictable on fridays");
     L("house-pforzheimer", "h4", "ana", "2026-10-03T19:55", "anyone have a stapler i can borrow, A-entryway");
+    L("house-pforzheimer", "h5", "mei", "2026-10-03T21:12", "@Priya Raman you're in stat 110 too right? we're at cabot for the pset 5 grind, there's room at the big table", { mentions: [ME] });
     L("year-29", "y1", "jonah", "2026-10-02T18:20", "reminder: course registration deadline is monday 11:59pm on my.harvard");
     L("year-29", "y2", "kofi", "2026-10-02T18:31", "thank you, i almost forgot to add my gen ed", { replyTo: "y1" });
     L("year-29", "y3", "nora", "2026-10-03T12:04", "concentration declaration info session is after break, the advising office posted it");
@@ -2913,8 +2925,8 @@ function Sheet({ title, onClose, children, footer, size, icon, bare, label }) {
     const k = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
     window.addEventListener("keydown", k);
     const prev = document.activeElement;
-    setTimeout(() => { const f = ref.current && ref.current.querySelector("[autofocus], input, textarea, button:not(.sheet-x)"); if (f && matchMedia("(pointer: fine)").matches) f.focus(); }, 60);
-    return () => { window.removeEventListener("keydown", k); if (prev && prev.focus) prev.focus(); };
+    const t0 = setTimeout(() => { const f = ref.current && ref.current.querySelector("[autofocus], input, textarea, button:not(.sheet-x)"); if (f && matchMedia("(pointer: fine)").matches) f.focus(); }, 0);
+    return () => { clearTimeout(t0); window.removeEventListener("keydown", k); if (prev && prev.focus) prev.focus(); };
   }, [close]);
   const down = (e) => { if (matchMedia("(min-width: 760px)").matches) return; drag.current = { y: e.clientY, t: Date.now() }; e.currentTarget.setPointerCapture(e.pointerId); };
   const move = (e) => { if (drag.current) setDy(Math.max(0, e.clientY - drag.current.y)); };
@@ -3768,7 +3780,7 @@ function PsetBoard({ courseId, D }) {
     <div class="probs">${sorted.map((r) => html`<div class=${"prob" + (r.fresh ? " fresh" : "")} key=${r.p}>
       <button class="prob-main" onClick=${() => setProblem(r.p)}>
         <span class="pchip lg">${prettyProblem(r.p)}</span>
-        <span class="prob-body"><b>${r.qs[0] ? html`<${RichText} text=${r.qs[0].text} />` : "No questions yet"}</b>
+        <span class="prob-body"><b>${r.qs[0] || r.msgs[0] ? html`${(r.qs[0] || r.msgs[0]).kind === "photo" ? "📷 " : ""}<${RichText} text=${(r.qs[0] || r.msgs[0]).text || "Photo"} />` : "No questions yet"}</b>
           <small>${r.msgs.length ? plural(r.msgs.length, "message") + " · last " + relShort(r.last.ts) : "Be the first to ask"}</small></span>
         <span class=${"status s-" + r.status}>${r.status === "answered" ? html`<${Icon} name="check" size=${12} />Answered` : r.status === "open" ? "Open" : ""}</span>
       </button>
@@ -4138,7 +4150,8 @@ function calItems(app, from, to) {
     }
   }
   for (const t of app.tasks) if (t.due && t.due >= from && t.due < to && !t.done) allDay.push({ key: "t" + t.id, at: t.due, kind: "task", cid: t.cid, title: t.title, sub: "Task · " + tShort(t.due), run: () => app.setRoute({ view: "tasks" }) });
-  for (const d of Catalog.termDates) { const at = Date.parse(d.at); if (at >= from && at < to) allDay.push({ key: "td" + d.title, at, kind: "term", title: d.title, sub: d.kind === "holiday" ? "Harvard calendar" : "Registrar deadline", run: null }); }
+  const norm = (t) => t.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z ]/g, "").trim().slice(0, 18);
+  for (const d of Catalog.termDates) { const at = Date.parse(d.at); if (at >= from && at < to && !allDay.some((a) => Sched.et(a.at).key === Sched.et(at).key && norm(a.title) === norm(d.title))) allDay.push({ key: "td" + d.title, at, kind: "term", title: d.title, sub: d.kind === "holiday" ? "Harvard calendar" : "Registrar deadline", run: null }); }
   return { timed: out.sort((a, b) => a.start - b.start), allDay: allDay.sort((a, b) => a.at - b.at), now };
 }
 function useBoardGoing(app) {
@@ -5409,6 +5422,9 @@ function Onboarding({ onDone }) {
   const [sections, setSections] = useState(demo ? PRIYA.sections : {});
   const [prompts, setPrompts] = useState(demo ? PRIYA.prompts : []);
   const [following, setFollowing] = useState({});
+  // The placement lookup can land after this screen mounts; preselect once it does.
+  const placedKey = placed.map((p) => p.id).join(",");
+  useEffect(() => { if (placedKey) setPicked((cur) => [...cur, ...placed.filter((p) => !cur.some((c) => c.id === p.id))]); }, [placedKey]);
   const [built, setBuilt] = useState(0);
   const [failed, setFailed] = useState(false);
   const email = demo ? "priya_raman@college.harvard.edu" : app.viewerEmail || "";
@@ -5752,6 +5768,8 @@ function Results({ courseId }) {
 }
 
 // ---- recap drafting: stream, then Keep / Edit / Remove per line ----------------------------------
+// Demo only: raw notes an organizer might paste, so the drafting flow can be tried end to end.
+const EXAMPLE_NOTES = "L10 (example notes)\nIndicator r.v.s again. I_A = 1 if A occurs else 0. E[I_A] = P(A), the fundamental bridge. Slide 4.\nMatching problem: n people, n hats, shuffled. I_j = 1 if person j gets own hat. E[# matches] = n * (1/n) = 1, no matter n. Slide 6.\nLOTUS: E[g(X)] = sum over x of g(x) P(X = x). You don't need the PMF of g(X). Slide 11.\nVariance: Var(X) = E[(X - EX)^2] = E[X^2] - (EX)^2. Slide 14.\nVar(X + c) = Var(X), Var(cX) = c^2 Var(X). Variance is NOT linear in general.\nPoisson preview at the very end, more next time.";
 function RecapComposer({ courseId, onDone }) {
   const app = useApp();
   const c = course(app, courseId);
@@ -5805,6 +5823,7 @@ function RecapComposer({ courseId, onDone }) {
       <label class="field"><span>Title</span><input class="input" value=${title} onInput=${(e) => setTitle(e.target.value)} placeholder="Expectation & Linearity" /></label>
       <label class="field"><span>Textbook sections</span><input class="input" value=${sections} onInput=${(e) => setSections(e.target.value)} placeholder="§4.1–4.3" /></label>
     </div>
+    ${app.demo && !notes ? html`<div class="org-demo"><${Icon} name="note" size=${16} /><span class="grow">Try it with an organizer's raw notes from a lecture.</span><button class="btn sm soft" onClick=${() => setNotes(EXAMPLE_NOTES)}>Use example notes</button></div>` : null}
     <label class="field"><span>Your lecture notes, slide text or transcript <small>${words ? plural(words, "word") : ""}</small></span>
       <textarea class="input" rows="7" value=${notes} onInput=${(e) => setNotes(e.target.value)} placeholder="Paste what you wrote down. Claude drafts only from this, so it can't invent what wasn't said."></textarea></label>
     <div class="row-gap">
@@ -6167,7 +6186,7 @@ function ClassRow({ courseId }) {
 // Session (v2): one mode (live class or demo class), its data, every action.
 // UI modules read everything through `useApp()`.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = "roster-demo-v6";
+const DEMO_KEY = "roster-demo-v7";
 const Notice = { liveDenied: false, next: null };
 let demoDB = null;
 function getDemoDB() {

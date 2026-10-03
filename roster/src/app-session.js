@@ -2,7 +2,7 @@
 // Session (v2): one mode (live class or demo class), its data, every action.
 // UI modules read everything through `useApp()`.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = "roster-demo-v6";
+const DEMO_KEY = "roster-demo-v7";
 const Notice = { liveDenied: false, next: null };
 let demoDB = null;
 function getDemoDB() {

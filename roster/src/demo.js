@@ -299,6 +299,8 @@ const Demo = (() => {
     { id: "b-book", by: "leila", ts: "2026-10-02T12:05", cat: "market", title: "Selling: Blitzstein & Hwang, 2nd edition", body: "Hardcover, a few highlights in ch. 1–3. The PDF is free too, but some people like paper.", price: "$25" },
     { id: "b-lost", by: "jonah", ts: "2026-10-01T15:10", cat: "lost", title: "Lost: navy Hydro Flask with a Mather sticker", body: "Left it in Sanders after Thursday's Stat 110 lecture, row M. Would love it back." },
     { id: "b-ls1a", by: "mei", ts: "2026-10-03T09:30", cat: "study", title: "LS 1a ch. 6 study group", body: "Protein folding problems before the pset is due. All levels.", event: { at: "2026-10-05T20:00", end: "2026-10-05T22:00", where: "Pfoho dining hall" }, going: ["ana"], maybe: ["aiden"] },
+    { id: "b-calc", by: "kofi", ts: "2026-10-02T19:30", cat: "market", title: "TI-84 Plus CE, barely used", body: "Comes with the charging cable. Pick up in Dunster.", price: "$60" },
+    { id: "b-lamp", by: "nora", ts: "2026-10-03T08:15", cat: "market", title: "Free: desk lamp and a small whiteboard", body: "Moving rooms this weekend. First come, first served, Currier.", price: "Free" },
     { id: "b-trucks", by: "zara", ts: "2026-10-03T11:45", cat: "general", title: "Food trucks on the Science Center Plaza today", body: "The dumpling one is back. Line's short before 12:15." },
     { id: "b-run", by: "dev", ts: "2026-10-02T07:40", cat: "event", title: "Charles River 5K, easy pace", body: "Meeting at Weld Boathouse, back by 9. No one gets left behind.", event: { at: "2026-10-04T08:00", end: "2026-10-04T09:00", where: "Weld Boathouse" }, going: ["maya", "theo"], maybe: ["nora"] },
   ];
@@ -371,6 +373,7 @@ const Demo = (() => {
     L("house-pforzheimer", "h2", "mei", "2026-10-03T15:30", "the shuttle was 20 min late again this morning, almost missed stat 110", { replyTo: "h1" });
     L("house-pforzheimer", "h3", "aiden", "2026-10-03T15:41", "the quad express is so unpredictable on fridays");
     L("house-pforzheimer", "h4", "ana", "2026-10-03T19:55", "anyone have a stapler i can borrow, A-entryway");
+    L("house-pforzheimer", "h5", "mei", "2026-10-03T21:12", "@Priya Raman you're in stat 110 too right? we're at cabot for the pset 5 grind, there's room at the big table", { mentions: [ME] });
     L("year-29", "y1", "jonah", "2026-10-02T18:20", "reminder: course registration deadline is monday 11:59pm on my.harvard");
     L("year-29", "y2", "kofi", "2026-10-02T18:31", "thank you, i almost forgot to add my gen ed", { replyTo: "y1" });
     L("year-29", "y3", "nora", "2026-10-03T12:04", "concentration declaration info session is after break, the advising office posted it");

@@ -161,6 +161,8 @@ function Results({ courseId }) {
 }
 
 // ---- recap drafting: stream, then Keep / Edit / Remove per line ----------------------------------
+// Demo only: raw notes an organizer might paste, so the drafting flow can be tried end to end.
+const EXAMPLE_NOTES = "L10 (example notes)\nIndicator r.v.s again. I_A = 1 if A occurs else 0. E[I_A] = P(A), the fundamental bridge. Slide 4.\nMatching problem: n people, n hats, shuffled. I_j = 1 if person j gets own hat. E[# matches] = n * (1/n) = 1, no matter n. Slide 6.\nLOTUS: E[g(X)] = sum over x of g(x) P(X = x). You don't need the PMF of g(X). Slide 11.\nVariance: Var(X) = E[(X - EX)^2] = E[X^2] - (EX)^2. Slide 14.\nVar(X + c) = Var(X), Var(cX) = c^2 Var(X). Variance is NOT linear in general.\nPoisson preview at the very end, more next time.";
 function RecapComposer({ courseId, onDone }) {
   const app = useApp();
   const c = course(app, courseId);
@@ -214,6 +216,7 @@ function RecapComposer({ courseId, onDone }) {
       <label class="field"><span>Title</span><input class="input" value=${title} onInput=${(e) => setTitle(e.target.value)} placeholder="Expectation & Linearity" /></label>
       <label class="field"><span>Textbook sections</span><input class="input" value=${sections} onInput=${(e) => setSections(e.target.value)} placeholder="§4.1–4.3" /></label>
     </div>
+    ${app.demo && !notes ? html`<div class="org-demo"><${Icon} name="note" size=${16} /><span class="grow">Try it with an organizer's raw notes from a lecture.</span><button class="btn sm soft" onClick=${() => setNotes(EXAMPLE_NOTES)}>Use example notes</button></div>` : null}
     <label class="field"><span>Your lecture notes, slide text or transcript <small>${words ? plural(words, "word") : ""}</small></span>
       <textarea class="input" rows="7" value=${notes} onInput=${(e) => setNotes(e.target.value)} placeholder="Paste what you wrote down. Claude drafts only from this, so it can't invent what wasn't said."></textarea></label>
     <div class="row-gap">

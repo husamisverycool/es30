@@ -23,7 +23,8 @@ function calItems(app, from, to) {
     }
   }
   for (const t of app.tasks) if (t.due && t.due >= from && t.due < to && !t.done) allDay.push({ key: "t" + t.id, at: t.due, kind: "task", cid: t.cid, title: t.title, sub: "Task · " + tShort(t.due), run: () => app.setRoute({ view: "tasks" }) });
-  for (const d of Catalog.termDates) { const at = Date.parse(d.at); if (at >= from && at < to) allDay.push({ key: "td" + d.title, at, kind: "term", title: d.title, sub: d.kind === "holiday" ? "Harvard calendar" : "Registrar deadline", run: null }); }
+  const norm = (t) => t.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z ]/g, "").trim().slice(0, 18);
+  for (const d of Catalog.termDates) { const at = Date.parse(d.at); if (at >= from && at < to && !allDay.some((a) => Sched.et(a.at).key === Sched.et(at).key && norm(a.title) === norm(d.title))) allDay.push({ key: "td" + d.title, at, kind: "term", title: d.title, sub: d.kind === "holiday" ? "Harvard calendar" : "Registrar deadline", run: null }); }
   return { timed: out.sort((a, b) => a.start - b.start), allDay: allDay.sort((a, b) => a.at - b.at), now };
 }
 function useBoardGoing(app) {

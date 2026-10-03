@@ -181,8 +181,8 @@ function Sheet({ title, onClose, children, footer, size, icon, bare, label }) {
     const k = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
     window.addEventListener("keydown", k);
     const prev = document.activeElement;
-    setTimeout(() => { const f = ref.current && ref.current.querySelector("[autofocus], input, textarea, button:not(.sheet-x)"); if (f && matchMedia("(pointer: fine)").matches) f.focus(); }, 60);
-    return () => { window.removeEventListener("keydown", k); if (prev && prev.focus) prev.focus(); };
+    const t0 = setTimeout(() => { const f = ref.current && ref.current.querySelector("[autofocus], input, textarea, button:not(.sheet-x)"); if (f && matchMedia("(pointer: fine)").matches) f.focus(); }, 0);
+    return () => { clearTimeout(t0); window.removeEventListener("keydown", k); if (prev && prev.focus) prev.focus(); };
   }, [close]);
   const down = (e) => { if (matchMedia("(min-width: 760px)").matches) return; drag.current = { y: e.clientY, t: Date.now() }; e.currentTarget.setPointerCapture(e.pointerId); };
   const move = (e) => { if (drag.current) setDy(Math.max(0, e.clientY - drag.current.y)); };
