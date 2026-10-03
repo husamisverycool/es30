@@ -100,7 +100,8 @@ function Session({ rt, mode, switchMode }) {
     for (const m of members) for (const [id, code] of Object.entries(m.courseCodes || {})) out[id] = { id, code, title: "", who: "", meets: "", where: "", size: 0, psets: "" };
     return out;
   }, [members]);
-  const saved = useMemo(() => Object.fromEntries((savedList || []).map((s) => [s.id, s])), [savedList]);
+  const saved = useMemo(() => Object.fromEntries((savedList || []).filter((s) => s.type !== "task").map((s) => [s.id, s])), [savedList]);
+  const tasks = useMemo(() => (savedList || []).filter((s) => s.type === "task"), [savedList]);
 
   useEffect(() => {
     if (!demo && isOrganizerReal && config !== null && !((config && config.organizers) || []).includes(uid)) {
@@ -182,7 +183,7 @@ function Session({ rt, mode, switchMode }) {
   const app = {
     rt, mode, demo, live: !demo, liveOK, db, uid, canWrite, isOrganizerReal, isOrganizer: demo || isOrganizerReal, organizerIds,
     sample: rt.sample, downloads: rt.downloads, members, membersById, me: myDoc || null, myCourses, customCourses, online, person,
-    feeds, hubs, fixes, saved, placement,
+    feeds, hubs, fixes, saved, tasks, placement,
     viewerName: rt.me && rt.me.name, viewerEmail: rt.me && rt.me.email, replyTo, setReplyTo, toast, write, lrVersion,
     route, setRoute, sheets,
     open: (kind, props) => setSheets((s) => [...s.filter((x) => x.kind !== kind), { kind, props: props || {}, key: Math.random() }]),
@@ -235,7 +236,7 @@ function Session({ rt, mode, switchMode }) {
     save: (cid, m) => {
       const ref = db.doc("data/users/" + uid + "/" + cid + "~" + m.id);
       const on = !!saved[cid + "~" + m.id];
-      return write(() => (on ? ref.delete() : ref.set({ cid, mid: m.id, by: m.by, ts: now(), at: m.ts, kind: m.kind, text: m.text || (m.poll && m.poll.question) || (m.event && m.event.title) || "" })), on ? "Removed from Saved" : "Saved for later");
+      return write(() => (on ? ref.delete() : ref.set({ type: "saved", cid, mid: m.id, by: m.by, ts: now(), at: m.ts, kind: m.kind, text: m.text || (m.poll && m.poll.question) || (m.event && m.event.title) || "" })), on ? "Removed from Saved" : "Saved for later");
     },
     report: (cid, m, reason, note) => write(() => db.collection("reports/" + uid + "/items").add({ cid, mid: m.id, author: m.by, reason, note: note || "", text: (m.text || "").slice(0, 300), ts: now() }), "Reported. Only the organizer sees reports."),
 
@@ -288,7 +289,10 @@ function Session({ rt, mode, switchMode }) {
       const courses = { ...(prev.courses || {}) };
       const codes = { ...(prev.courseCodes || {}) };
       for (const p of picked || []) { if (!courses[p.id]) courses[p.id] = t; if (p.code && !Catalog.byId[p.id]) codes[p.id] = p.code; }
-      const body = { ...prev, ...(profile || {}), courses, courseCodes: codes, sections: { ...(prev.sections || {}), ...(sections || {}) }, joinedAt: prev.joinedAt || t, visits: prev.visits || {} };
+      const merged = { ...prev, ...(profile || {}) };
+      // Placed in your House and class-year chats too, the way Saturn places you in your school.
+      for (const sp of [Catalog.houseId(merged.house), Catalog.yearId(merged.year)]) if (sp && !courses[sp]) courses[sp] = t + 1;
+      const body = { ...merged, courses, courseCodes: codes, sections: { ...(prev.sections || {}), ...(sections || {}) }, joinedAt: prev.joinedAt || t, visits: prev.visits || {} };
       delete body.id;
       return write(() => db.doc("members/" + uid).set(body));
     },
@@ -320,6 +324,38 @@ function Session({ rt, mode, switchMode }) {
       try { Object.keys(localStorage).filter((k) => /^roster:(lr|draft|last|view|inbox):?(demo)?/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (_) { /* ignore */ }
       switchMode("demo-reset-" + Date.now());
     },
+
+    // ---- friends, status ----
+    follow: (id) => {
+      const on = !!(myDoc && myDoc.following && myDoc.following[id]);
+      return write(() => db.doc("members/" + uid).update({ following: { [id]: on ? 0 : now() } }), on ? null : "Added " + firstName(person(id).name) + ". You'll see each other's free time if they add you back.");
+    },
+    isFriend: (id) => !!(myDoc && myDoc.following && myDoc.following[id] && membersById[id] && membersById[id].following && membersById[id].following[uid]),
+    setStatus: (st) => write(() => db.doc("members/" + uid).update({ status: st ? { e: st.e, text: st.text, until: st.until || 0, t: now() } : { e: "", text: "", until: 0, t: now() } }), st ? "Status set" : "Status cleared"),
+
+    // ---- tasks (private: only you can read data/users/<you>) ----
+    addTask: (t) => write(() => db.collection("data/users/" + uid).add({ type: "task", title: t.title, cid: t.cid || "", due: t.due || 0, done: 0, ts: now(), from: t.from || "" }), t.quiet ? null : "Added to your tasks"),
+    toggleTask: (t) => write(() => db.doc("data/users/" + uid + "/" + t.id).update({ done: t.done ? 0 : now() })),
+    deleteTask: (t) => write(() => db.doc("data/users/" + uid + "/" + t.id).delete(), "Task deleted"),
+
+    // ---- board (campus-wide) ----
+    postBoard: async (p, file) => {
+      const body = { by: uid, ts: now(), cat: p.cat, title: p.title, body: p.body || "", reactions: {}, comments: 0 };
+      if (p.cat === "event" || p.cat === "study") body.event = { at: p.at || 0, end: p.end || 0, where: p.where || "", rsvps: { [uid]: { s: "going", t: now() } } };
+      if (p.cat === "market") body.price = p.price || "";
+      if (file) { try { body.image = await Media.compress(file); } catch (_) { /* skip */ } }
+      return write(() => db.collection("board").add(body), "Posted to the Board");
+    },
+    reactBoard: (p, e) => {
+      const mine = !!(p.reactions && p.reactions[e] && p.reactions[e][uid]);
+      return write(() => db.doc("board/" + p.id).update({ reactions: { [e]: { [uid]: mine ? 0 : now() } } }));
+    },
+    rsvpBoard: (p, st) => {
+      const cur = p.event && p.event.rsvps && p.event.rsvps[uid];
+      return write(() => db.doc("board/" + p.id).update({ event: { rsvps: { [uid]: { s: cur && cur.s === st ? "" : st, t: now() } } } }));
+    },
+    commentBoard: (p, text) => write(() => db.collection("board/" + p.id + "/comments").add({ by: uid, ts: now(), text })),
+    deleteBoard: (p) => write(() => db.doc("board/" + p.id).update({ deleted: now() }), "Post removed"),
 
     // ---- organizer ----
     placeEmails: async (emails, courses) => {

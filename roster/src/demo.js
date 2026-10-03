@@ -283,6 +283,27 @@ const Demo = (() => {
     ],
   };
 
+  // Who has added whom. Mei and Ana (Pfoho, Stat 110) already added the viewer,
+  // so adding them back makes you friends right away.
+  const FOLLOWS = {
+    maya: ["dev", "nora", "kofi", "zara"], dev: ["maya", "nora", "sam"], nora: ["dev", "maya", "leila"], sam: ["theo", "dev"], mei: ["ana", "kofi", "maya", "you"],
+    theo: ["sam", "mei", "zara"], leila: ["nora", "jonah"], jonah: ["leila", "aiden"], ana: ["mei", "aiden", "you"], aiden: ["jonah", "ana"], zara: ["maya", "theo"], kofi: ["mei", "maya"],
+  };
+  const STATUS = {
+    mei: ["📚", "PSet 5 at Cabot", "2026-10-04T00:30"], theo: ["📚", "PSet 5 grind, come through", "2026-10-04T00:30"], kofi: ["📚", "Cabot 3rd floor", "2026-10-04T00:00"],
+    dev: ["🎧", "Free, say hi", "2026-10-03T23:30"], sam: ["😴", "Do not disturb", "2026-10-04T09:00"], ana: ["🍽️", "Pfoho dhall", "2026-10-03T22:15"],
+  };
+  // Campus Board posts (Saturn's Bulletin, Fizz's feed).
+  const BOARD = [
+    { id: "b-crepes", by: "ana", ts: "2026-10-03T15:20", cat: "event", title: "Study break: crepes in the Pfoho JCR", body: "Sunday 9 pm. Nutella, strawberries, and a quiet room after if you want to keep working.", event: { at: "2026-10-04T21:00", end: "2026-10-04T22:30", where: "Pforzheimer House JCR" }, going: ["mei", "aiden", "kofi", "maya"], maybe: ["sam"] },
+    { id: "b-book", by: "leila", ts: "2026-10-02T12:05", cat: "market", title: "Selling: Blitzstein & Hwang, 2nd edition", body: "Hardcover, a few highlights in ch. 1–3. The PDF is free too, but some people like paper.", price: "$25" },
+    { id: "b-lost", by: "jonah", ts: "2026-10-01T15:10", cat: "lost", title: "Lost: navy Hydro Flask with a Mather sticker", body: "Left it in Sanders after Thursday's Stat 110 lecture, row M. Would love it back." },
+    { id: "b-ls1a", by: "mei", ts: "2026-10-03T09:30", cat: "study", title: "LS 1a ch. 6 study group", body: "Protein folding problems before the pset is due. All levels.", event: { at: "2026-10-05T20:00", end: "2026-10-05T22:00", where: "Pfoho dining hall" }, going: ["ana"], maybe: ["aiden"] },
+    { id: "b-trucks", by: "zara", ts: "2026-10-03T11:45", cat: "general", title: "Food trucks on the Science Center Plaza today", body: "The dumpling one is back. Line's short before 12:15." },
+    { id: "b-run", by: "dev", ts: "2026-10-02T07:40", cat: "event", title: "Charles River 5K, easy pace", body: "Meeting at Weld Boathouse, back by 9. No one gets left behind.", event: { at: "2026-10-04T08:00", end: "2026-10-04T09:00", where: "Weld Boathouse" }, going: ["maya", "theo"], maybe: ["nora"] },
+  ];
+  const BOARD_COMMENTS = { "b-book": [["sam", "2026-10-02T13:10", "is it still available?"], ["leila", "2026-10-02T13:30", "yes! dm me in Stat 110 or find me in Quincy"]], "b-lost": [["aiden", "2026-10-01T18:00", "I think someone turned one in at the Science Center front desk"]] };
+
   function members() {
     const R2 = rng(29);
     const out = [];
@@ -300,12 +321,19 @@ const Demo = (() => {
       if (R2() < 0.25 || id === "u_demo_dev") courses.compsci50 = PLACED_AT;
       if (R2() < 0.4 || ["u_demo_maya", "u_demo_zara", "u_demo_theo"].includes(id)) courses.gened1079 = PLACED_AT;
       if (["u_demo_mei", "u_demo_zara", "u_demo_aiden"].includes(id) || (k > 90 && k < 102)) courses.expos20 = PLACED_AT;
+      // Auto-placed in their House and class-year chats.
+      courses["house-" + p.house.toLowerCase()] = PLACED_AT + 1;
+      courses["year-" + p.year.slice(1)] = PLACED_AT + 1;
+      const following = {};
+      for (const f of FOLLOWS[id.replace("u_demo_", "")] || []) following[f === "you" ? ME : R_(f)] = PLACED_AT + 3600e3;
+      const st = STATUS[id.replace("u_demo_", "")];
       out.push(["members/" + id, {
         displayName: p.name, house: p.house, year: p.year, concentration: p.conc,
         courses, visits, joinedAt: PLACED_AT,
         sections: p.sec ? { stat110: p.sec } : {},
         prompts: (p.prompts || []).map(([q, a]) => ({ q, a })),
-        pledgeAt: PLACED_AT, verified: "harvard.edu",
+        pledgeAt: PLACED_AT, verified: "harvard.edu", following,
+        ...(st ? { status: { e: st[0], text: st[1], until: ET(st[2]), t: NOW - 40 * 60e3 } } : {}),
       }]);
     }
     return out;
@@ -338,6 +366,22 @@ const Demo = (() => {
     L("compsci50", "y1", "dev", "2026-10-03T18:05", "anyone else's codespace stuck on 'setting up'");
     entries.push(["hub/lifesci1a", { due: [{ id: "ls1", title: "Problem set (example)", at: ET("2026-10-09T12:00"), where: "Canvas" }], rules: ["Talk through ideas, write up your own answers."], links: [] }]);
     entries.push(["hub/expos20", { due: [{ id: "ex1", title: "Essay 1 draft (example)", at: ET("2026-10-06T23:59"), where: "Canvas" }], rules: [], links: [] }]);
+    // House and class-year chats.
+    L("house-pforzheimer", "h1", "ana", "2026-10-03T15:22", "crepes in the JCR sunday 9pm, it's on the Board 🥞");
+    L("house-pforzheimer", "h2", "mei", "2026-10-03T15:30", "the shuttle was 20 min late again this morning, almost missed stat 110", { replyTo: "h1" });
+    L("house-pforzheimer", "h3", "aiden", "2026-10-03T15:41", "the quad express is so unpredictable on fridays");
+    L("house-pforzheimer", "h4", "ana", "2026-10-03T19:55", "anyone have a stapler i can borrow, A-entryway");
+    L("year-29", "y1", "jonah", "2026-10-02T18:20", "reminder: course registration deadline is monday 11:59pm on my.harvard");
+    L("year-29", "y2", "kofi", "2026-10-02T18:31", "thank you, i almost forgot to add my gen ed", { replyTo: "y1" });
+    L("year-29", "y3", "nora", "2026-10-03T12:04", "concentration declaration info session is after break, the advising office posted it");
+    for (const b of BOARD) {
+      const doc = { by: R_(b.by), ts: ET(b.ts), cat: b.cat, title: b.title, body: b.body, reactions: {}, comments: (BOARD_COMMENTS[b.id] || []).length };
+      if (b.price) doc.price = b.price;
+      if (b.event) doc.event = { at: ET(b.event.at), end: ET(b.event.end), where: b.event.where, rsvps: Object.fromEntries([...(b.going || []).map((k, i) => [R_(k), { s: "going", t: ET(b.ts) + (i + 1) * 15 * 60e3 }]), ...(b.maybe || []).map((k, i) => [R_(k), { s: "maybe", t: ET(b.ts) + (i + 2) * 21 * 60e3 }])]) };
+      doc.reactions = { "🔥": Object.fromEntries((b.going || ["maya", "dev"]).slice(0, 3).map((k, i) => [R_(k), ET(b.ts) + (i + 1) * 9 * 60e3])) };
+      entries.push(["board/" + b.id, doc]);
+      (BOARD_COMMENTS[b.id] || []).forEach(([k, at, text], i) => entries.push(["board/" + b.id + "/comments/c" + i, { by: R_(k), ts: ET(at), text }]));
+    }
     return entries;
   }
 

@@ -112,5 +112,45 @@ const Derive = (() => {
     };
   }
 
-  return { inbox, digest, week, search, countReacts, isChat };
+  // ---- schedules of people (Saturn's "who's free", "compare") ----
+  function meetingsOf(member, getCourse) {
+    const out = [];
+    if (!member) return out;
+    for (const cid of Object.keys(member.courses || {})) {
+      if (!Catalog.isCourse(cid)) continue;
+      const c = getCourse(cid);
+      const custom = member.schedule && member.schedule[cid];
+      for (const mt of custom && custom.length ? custom : Sched.parseMeets(c.meets, c.where)) out.push({ ...mt, cid, kind: mt.kind || "lecture" });
+      const sl = member.sections && member.sections[cid] && Catalog.slot(member.sections[cid]);
+      if (sl) out.push({ d: sl.d, s: sl.s, e: sl.e, where: "", kind: "section", cid, label: sl.label });
+    }
+    return out;
+  }
+  function busyAt(meetings, ts) {
+    return Sched.occurrences(meetings, ts - 6 * 3600e3, ts + 60e3).find((o) => o.start <= ts && o.end > ts) || null;
+  }
+  function nextOf(meetings, ts, days) {
+    return Sched.occurrences(meetings, ts, ts + (days || 7) * 864e5).find((o) => o.start > ts) || null;
+  }
+  // Shared free blocks between two people on one day, 8 AM to 10 PM.
+  function freeTogether(a, b, dayTs) {
+    const from = Sched.startOfDay(dayTs) + 8 * 3600e3, to = Sched.startOfDay(dayTs) + 22 * 3600e3;
+    const busy = [...Sched.occurrences(a, from, to), ...Sched.occurrences(b, from, to)].map((o) => [Math.max(o.start, from), Math.min(o.end, to)]).sort((x, y) => x[0] - y[0]);
+    const free = [];
+    let cur = from;
+    for (const [s, e] of busy) { if (s - cur >= 45 * 60e3) free.push([cur, s]); cur = Math.max(cur, e); }
+    if (to - cur >= 45 * 60e3) free.push([cur, to]);
+    return free;
+  }
+  function suggestions(me, members, uid) {
+    if (!me) return [];
+    const mine = Object.keys(me.courses || {}).filter((c) => Catalog.isCourse(c));
+    return members
+      .filter((m) => m.id !== uid && !(me.following && me.following[m.id]))
+      .map((m) => ({ m, shared: mine.filter((c) => m.courses && m.courses[c]), house: m.house && m.house === me.house, addedYou: !!(m.following && m.following[uid]) }))
+      .filter((x) => x.shared.length || x.house || x.addedYou)
+      .sort((x, y) => y.addedYou - x.addedYou || y.shared.length + (y.house ? 1.5 : 0) - (x.shared.length + (x.house ? 1.5 : 0)) || (x.m.displayName || "").localeCompare(y.m.displayName || ""));
+  }
+
+  return { inbox, digest, week, search, countReacts, isChat, meetingsOf, busyAt, nextOf, freeTogether, suggestions };
 })();

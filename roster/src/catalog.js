@@ -34,8 +34,22 @@ const Catalog = (() => {
       (c) => c.id.includes(compact) || c.code.toLowerCase().includes(s) || c.title.toLowerCase().includes(s) || (c.who || "").toLowerCase().includes(s),
     );
   }
+  // Houses and class years are spaces too: you're placed in them automatically.
+  const HOUSE_SHORT = { Adams: "Adams", Cabot: "Cabot", Currier: "Currier", Dunster: "Dunster", Eliot: "Eliot", Kirkland: "Kirkland", Leverett: "Leverett", Lowell: "Lowell", Mather: "Mather", Pforzheimer: "Pfoho", Quincy: "Quincy", Winthrop: "Winthrop", Dudley: "Dudley" };
+  const houseId = (h) => (h && HOUSE_SHORT[h] ? "house-" + h.toLowerCase() : null);
+  const yearId = (y) => (y && /^'\d\d$/.test(y) ? "year-" + y.slice(1) : null);
+  function space(id) {
+    if (id.startsWith("house-")) {
+      const name = Object.keys(HOUSE_SHORT).find((h) => "house-" + h.toLowerCase() === id) || id.slice(6);
+      return { id, kind: "house", code: HOUSE_SHORT[name] || name, title: name === "Dudley" ? "Dudley Community" : name + " House", who: "Everyone in " + (HOUSE_SHORT[name] || name) + " on Roster", meets: "", where: "", size: 400, psets: "" };
+    }
+    if (id.startsWith("year-")) return { id, kind: "year", code: "Class of 20" + id.slice(5), title: "Everyone graduating in 20" + id.slice(5), who: "", meets: "", where: "", size: 1700, psets: "" };
+    return null;
+  }
   function get(id, extra) {
     if (byId[id]) return byId[id];
+    const sp = space(id);
+    if (sp) return sp;
     if (extra && extra[id]) return extra[id];
     return { id, code: id.toUpperCase(), title: "", who: "", meets: "", where: "", size: 0, psets: "" };
   }
@@ -65,5 +79,11 @@ const Catalog = (() => {
     { title: "Last day of classes", at: "2026-12-04T17:00:00-05:00", kind: "term" },
   ];
 
-  return { courses, byId, get, search, idFromCode, normalizeCode, houses, houseShort, years, termDates, SLOTS, slot, PROMPTS, CONCENTRATIONS };
+  const BOARD_CATS = [
+    { id: "event", label: "Events", emoji: "🎟️" }, { id: "study", label: "Study groups", emoji: "📚" }, { id: "market", label: "Marketplace", emoji: "🏷️" },
+    { id: "lost", label: "Lost & found", emoji: "🔎" }, { id: "general", label: "General", emoji: "💬" },
+  ];
+  const STATUSES = [["📚", "Studying"], ["🍽️", "At the dhall"], ["🏃", "Running late"], ["🧪", "In lab"], ["😴", "Do not disturb"], ["🎧", "Free, say hi"]];
+  const isCourse = (id) => !/^(house|year)-/.test(id);
+  return { courses, byId, get, search, idFromCode, normalizeCode, houses, houseShort, years, termDates, SLOTS, slot, PROMPTS, CONCENTRATIONS, houseId, yearId, space, isCourse, BOARD_CATS, STATUSES };
 })();
