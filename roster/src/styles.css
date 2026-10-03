@@ -176,7 +176,8 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .class-row:hover { background: var(--surface-2); }
 .class-row.on { background: var(--accent-soft); }
 .class-row.on::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
-.class-row .body { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.class-row .body { flex: 1; min-width: 0; display: grid; gap: 1px; overflow: hidden; }
+.class-row .body > span { min-width: 0; }
 .class-row .top { display: flex; align-items: baseline; gap: 8px; }
 .class-row .code { font-weight: 800; font-size: 15px; letter-spacing: -.01em; white-space: nowrap; }
 .class-row .when { margin-left: auto; font-size: 12px; color: var(--ink-3); white-space: nowrap; }

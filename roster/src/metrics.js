@@ -142,7 +142,9 @@ const Metrics = (() => {
       push(f.ts, f.by, "correction", "recap", (f.text || "").length, false, f.recapId);
       for (const [uid, ts] of Object.entries(f.votes || {})) if (ts) push(ts, uid, "agree", "recap", 0, false, f.id);
     }
+    const header = rows.shift();
     rows.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+    rows.unshift(header);
     return rows.map((r) => r.map((v) => (/[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : v)).join(",")).join("\n");
   }
 

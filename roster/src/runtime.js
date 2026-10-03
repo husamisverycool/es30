@@ -8,8 +8,9 @@ const Runtime = (() => {
   const use = (name) => (hasClaude() ? window.claude.use(name).catch(() => null) : Promise.resolve(null));
 
   async function boot() {
+    const forceDemo = !!window.ROSTER_FORCE_DEMO;
     const [db, user, sample, room, downloads] = await Promise.all([
-      use("db"), use("user"), use("sample"), use("room"), use("downloads"),
+      forceDemo ? null : use("db"), use("user"), use("sample"), forceDemo ? null : use("room"), use("downloads"),
     ]);
     let me = null, canWrite = null, isOwner = false;
     if (user) {
@@ -21,6 +22,7 @@ const Runtime = (() => {
     }
     const live = !!(db && me && me.id);
     return {
+      forceDemo,
       live,
       db,
       user,

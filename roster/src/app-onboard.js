@@ -136,6 +136,7 @@ function Onboarding({ onDone, onJoining }) {
         </ul>
         <div class="ob-who"><${Avatar} uid=${app.uid} size=${40} name=${name || undefined} /><div class="grow"><b>${app.demo ? "You're trying it as " + PRIYA.name : name ? "Signed in as " + name : "Signed in"}</b><small>${app.demo ? "Demo · Pforzheimer '29 · nothing you post leaves this browser" : "Classmates see your name and house next to your messages."}</small></div></div>
         <button class="btn btn-primary btn-block" onClick=${() => setStep(1)}>Add my classes</button>
+        ${app.live ? html`<button class="btn btn-ghost btn-block" onClick=${() => app.switchMode("demo")}>Just looking? Open the demo class</button>` : null}
         <div class="ob-fine">Run by a student. Not affiliated with Harvard or course staff.</div>` : null}
       ${step === 1 ? html`
         <h2>What are you taking?</h2>

@@ -2,6 +2,7 @@
 // Session: one mode (live class or demo class), its data, its actions.
 // ---------------------------------------------------------------------------
 const DEMO_KEY = "roster-demo-v4";
+const Notice = { liveDenied: false, next: null };
 let demoDB = null;
 function getDemoDB() {
   if (!demoDB) {
@@ -32,6 +33,8 @@ function Session({ rt, mode, switchMode }) {
     setToasts((t) => [...t.slice(-2), { id, msg }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   }, []);
+  useEffect(() => { if (Notice.next) { const m = Notice.next; Notice.next = null; setTimeout(() => toast(m), 300); } }, []);
+  const liveOK = rt.live && rt.canWrite !== false && !Notice.liveDenied;
   const membersRaw = useCollection(() => db.collection("members"), [db]);
   const members = membersRaw || [];
   const myDoc = useDocData(() => db.doc("members/" + uid), [db, uid]);
@@ -111,7 +114,16 @@ function Session({ rt, mode, switchMode }) {
         await new Promise((r) => setTimeout(r, 400 + Math.random() * 600));
         try { await fn(); if (ok) toast(ok); return true; } catch (e2) { toast(errCopy(e2)); return false; }
       }
-      if (e && e.code === "invalid_argument" && !demo && !isOrganizerReal) setReadOnly(true);
+      if (e && e.code === "invalid_argument" && !demo && !isOrganizerReal) {
+        if (!myDoc) {
+          // Not a member of the live class (e.g. viewing by a public link): show the demo instead.
+          Notice.liveDenied = true;
+          Notice.next = "You can view this page but not join the live class. Here's the demo class instead.";
+          switchMode("demo");
+          return false;
+        }
+        setReadOnly(true);
+      }
       toast(errCopy(e));
       return false;
     }
@@ -119,7 +131,7 @@ function Session({ rt, mode, switchMode }) {
   const msgs = (c) => db.collection("courses/" + c + "/messages");
 
   const app = {
-    rt, mode, demo, live: !demo, db, uid, canWrite, isOrganizerReal, isOrganizer: demo || isOrganizerReal, organizerIds,
+    rt, mode, demo, live: !demo, liveOK, db, uid, canWrite, isOrganizerReal, isOrganizer: demo || isOrganizerReal, organizerIds,
     sample: rt.sample, downloads: rt.downloads, members, membersById, me: myDoc || null, customCourses, online, person,
     viewerName: rt.me && rt.me.name, replyTo, setReplyTo, toast, write, lrVersion,
     switchMode: (m) => { LS.set("roster:mode", m); switchMode(m); },
@@ -195,7 +207,7 @@ function Session({ rt, mode, switchMode }) {
 
   const banner = demo
     ? html`<div class="banner"><span class="emo">🧪</span><span class="grow"><b>Demo class.</b> Example classmates, STAT 110, Sat Oct 3. Your posts stay in this browser.</span>
-        <button onClick=${app.resetDemo}>Reset</button>${rt.live && rt.canWrite !== false ? html`<button onClick=${() => app.switchMode("live")}>Live class →</button>` : null}</div>`
+        <button onClick=${app.resetDemo}>Reset</button>${liveOK ? html`<button onClick=${() => app.switchMode("live")}>Live class →</button>` : null}</div>`
     : readOnly ? html`<div class="banner"><span class="grow"><b>Read-only.</b> You can't post in the live class.</span><button onClick=${() => app.switchMode("demo")}>Try the demo →</button></div>` : null;
   app.banner = banner;
 
@@ -293,7 +305,7 @@ function Sidebar({ courses, current, hubs }) {
     ${menu ? html`<${Popover} anchor=${menu} onClose=${() => setMenu(null)} align="right"><div class="menu" style=${{ minWidth: "230px" }}>
       <button onClick=${() => { setMenu(null); app.openAdd(); }}><${Icon} name="plus" />Add a class</button>
       ${app.isOrganizer ? html`<button onClick=${() => { setMenu(null); app.openOrganizer("results"); }}><${Icon} name="chart" />Organizer tools${app.demo ? " (demo)" : ""}</button>` : null}
-      ${app.demo && app.rt.live && app.rt.canWrite !== false ? html`<button onClick=${() => app.switchMode("live")}><${Icon} name="users" />Go to the live class</button>` : null}
+      ${app.demo && app.liveOK ? html`<button onClick=${() => app.switchMode("live")}><${Icon} name="users" />Go to the live class</button>` : null}
       ${!app.demo ? html`<button onClick=${() => app.switchMode("demo")}><${Icon} name="book" />Open the demo class</button>` : null}
       ${app.demo ? html`<button onClick=${app.resetDemo}><${Icon} name="history" />Reset the demo</button>` : null}
     </div><//>` : null}

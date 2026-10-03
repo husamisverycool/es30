@@ -21,10 +21,17 @@ const loader = `
   document.head.appendChild(s);
 })();`;
 const scripts = plain + "\n\nfunction __rosterApp() {\n" + ui + "\n}\n" + loader;
-const html = src("shell.html")
+const page = (flags, title) => src("shell.html")
+  .replace("<title>Roster</title>", "<title>" + title + "</title>")
   .replace("/*__STYLES__*/", () => src("styles.css"))
+  .replace("/*__FLAGS__*/", () => flags)
   .replace("/*__SCRIPTS__*/", () => scripts);
 
 mkdirSync(join(root, "dist"), { recursive: true });
-writeFileSync(join(root, "dist", "roster.html"), html);
-console.log("built roster/dist/roster.html", (html.length / 1024).toFixed(1) + " KB");
+// Live build: the real class chat (shared db) plus the demo class.
+const live = page("", "Roster");
+writeFileSync(join(root, "dist", "roster.html"), live);
+// Demo build: demo class only, safe to share with anyone (TF, podcast listeners).
+const demo = page("window.ROSTER_FORCE_DEMO = true;", "Roster Demo Class");
+writeFileSync(join(root, "dist", "roster-demo.html"), demo);
+console.log("built dist/roster.html", (live.length / 1024).toFixed(1) + " KB", "and dist/roster-demo.html", (demo.length / 1024).toFixed(1) + " KB");
