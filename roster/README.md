@@ -15,31 +15,58 @@ Both links are private until you share them from the page's **Share** menu.
 
 ## What the MVP does
 
-Each item lists the 2a element it implements.
+The core test is still placement: add your classes and you're in their chats. v2 builds the rest of a student's week around it, the way Saturn does. Each item lists the 2a element it implements.
 
-- **Placement** (automatic placement): onboarding picks your courses, by search or by pasting from my.harvard, and you're in every chat at once. The arrival screen shows how many classmates are already there.
-- **Class chat:** replies, reactions, @mentions, a typing line, and an unread divider. Due dates are pinned with a live countdown.
-- **PSet topics with per-problem tags,** so "did you get 3(b)?" finds the people stuck on 3(b).
-- **AI lecture recap** (one checked AI summary per lecture):
-  - The organizer pastes notes and Claude drafts a recap from those notes only.
-  - Classmates mark lines "Looks right" or suggest a fix.
-  - A fix replaces the AI's line when 3 classmates agree.
-- **Hub** (one pinned hub): course info, due dates with Google/Outlook calendar links, pinned rules, links, and the people in the class with their house and year.
-- **Organizer results:** the research question computed from the log against the 2a success and kill lines. Organizer activity is excluded.
-  - Results show contribution rate, cycle-2 retention with pace, fixes per recap, and shares per week.
-  - Unlike GroupMe, results also show who opened the chat but never posted.
-  - The 3-question exit survey appears after cycle 1.
-  - The pseudonymous CSV log exports for the write-up.
+- **Onboarding, 12 steps** (automatic placement):
+  1. Classes: search, paste from my.harvard, or scan a screenshot with Claude.
+  2. Verified (a member of the class's organization).
+  3. Name and photo.
+  4. Year and House.
+  5. Concentration.
+  6. Sections.
+  7. Profile prompts.
+  8. The community pledge.
+  9. People you may know.
+  10. A build checklist.
+  11. Arrival in every chat at once, with House and class-year spaces added automatically.
+  12. If the organizer placed you, your classes are preselected.
+- **Class chat:**
+  - Replies, reactions, @mentions, photos, polls (vote to see results), and study sessions with Going / Maybe / Can't.
+  - Swipe to reply and long-press menus, plus a typing line, an unread divider and a "while you were away" digest that has no AI in it.
+  - Due dates are pinned with a live countdown.
+- **Class tabs:**
+  - PSet board: per-problem threads, "stuck too" counts and answered/open status.
+  - AI lecture recaps (one checked AI summary per lecture): classmates check lines or suggest fixes; a fix replaces the AI's line when 3 agree.
+  - Shared notes with upvotes and math.
+  - Section rooms.
+  - The people in the class.
+- **Now:** a now/next hero (in lecture "ENDS IN", starting, done), friends' status, due soon, tasks, today's classes, events tonight and what's new.
+- **Calendar:**
+  - Week grid (desktop) or day view (phone), and a 3-week list.
+  - Classes, sections, deadlines, term dates, and sessions you're going to.
+  - Editable class times, with "add to Google Calendar" repeating weekly.
+- **Board:** the campus feed for events, study groups, marketplace, lost & found and general posts, with RSVPs, reactions and comments.
+- **People:**
+  - Friends (mutual adds) with free / in-class status.
+  - People who added you, suggestions from your classes and House, and search.
+  - Profiles with prompts, classes in common, and a free-together schedule compare.
+- **Activity** (replies, mentions, reactions, recap news), **Saved** messages, **Tasks** (private), and **You** (profile, status, classes, theme, guidelines, About this study).
+- **⌘K palette** across classes, people, messages and actions, with G-then-key shortcuts.
+- **Organizer:**
+  - Results for the research question against the 2a success and kill lines: contribution, cycle-2 retention with pace, readers who never posted, writing vs one-tap responses, fixes per recap, shares, and the exit survey.
+  - Recap drafting with Claude: every line is reviewed Keep / Edit / Remove before it posts.
+  - Dates and cycles, placement (pick people from the directory), a reports queue, announcements, and a pseudonymous CSV export.
 
-Every visual and copy decision is traced to a real app in [DESIGN.md](DESIGN.md).
+Every visual, interaction and copy decision is traced to a real app in [DESIGN.md](DESIGN.md).
 
 ## Sharing the live class
 
 The live class keeps its data in the artifact's own database. Access rules:
 - Only people the artifact is shared with at **Contributor** level or above can read or post.
 - Each student can edit only their own profile.
-- The hub, recaps and settings are owner-only.
-- Survey answers are visible only to the owner.
+- The hub, recaps, settings and placements are owner-only. Each student can read only their own placement.
+- Survey answers and reports are visible only to the owner.
+- Tasks and saved messages are private to each person.
 
 **How to let students in:**
 - **On a plan with other members (Team / Enterprise / Education):** share with the workspace as Contributor.
@@ -48,17 +75,21 @@ The live class keeps its data in the artifact's own database. Access rules:
 **Limits:**
 - Every participant needs to be signed in to Claude to post. That limits who can be placed, and it is a real gap versus GroupMe.
 - Visitors who can view but not post land in the demo class.
+- Board posts can be changed by any contributor (reactions and RSVPs are writes to the post), so a bad actor could edit someone else's post. The organizer can remove posts and see reports.
+- The platform doesn't give this page anyone's email, so "verified" means "a member of the organization that owns the artifact".
 
 ## Build and test
 
 ```sh
 node roster/build.mjs                       # writes dist/roster.html and dist/roster-demo.html
-# Playwright tests (Chromium); HTM_UMD points at htm@3.1.1/preact/standalone.umd.js from npm
-node roster/test/demo-flow.mjs <outDir>     # full demo flow, desktop/tablet/phone, light/dark, screenshots
-node roster/test/live-mock.mjs <outDir>     # organizer + student on a mocked runtime, 21 checks
+# Playwright (Chromium). HTM_UMD = htm@3.1.1/preact/standalone.umd.js, KATEX_JS = katex@0.16.11/dist/katex.min.js
+node roster/test/demo-flow.mjs <outDir>     # onboarding + every screen, desktop and phone, light and dark, 86 screenshots
+node roster/test/live-mock.mjs <outDir>     # organizer + placed student + visitors on a mocked runtime, 30 checks
 ```
 
 Source lives in `src/`:
 - `store.js`: LocalDB, the same API as the artifact db, used by the demo.
-- `metrics.js`: the research metrics.
-- `app-*.js`: the UI, built with Preact and htm from jsDelivr.
+- `metrics.js`: the research metrics and the CSV export.
+- `lib-*.js`: schedules, photos and math, and derived views (inbox, digest, weekly story, search, free time).
+- `demo.js`: the example class (142 example classmates, Stat 110 on Sat Oct 3, 2026).
+- `ui-*.js` and `app-session.js`: the UI, built with Preact and htm from jsDelivr. KaTeX renders math as MathML.

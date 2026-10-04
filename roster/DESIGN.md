@@ -1,109 +1,231 @@
-# Roster: design spec (every decision traced to a real app)
+# Roster v2: design spec, with a source for every decision
 
-The rule for this build: no visual or copy decision comes from taste. Each token or pattern below names the shipping product it is taken from. The research behind it was gathered on 2026-10-03 from:
-- live-site captures,
-- open-source client code (Telegram Web A, Discord token CSS, WhatsApp WDS tokens, Bluesky ALF),
-- Apple HIG,
-- the 2023 Saturn screens published in Lenny's Newsletter,
-- the X Community Notes docs.
+The rule for this build: no visual, interaction or copy decision comes from taste. Each one below names the shipping product or primary document it is taken from. The research behind v2 is seven dossiers gathered on 2026-10-03:
+- visual systems,
+- messaging motion,
+- time and schedules,
+- community (events, polls, profiles, safety),
+- onboarding,
+- education and power-user tools,
+- AI and data UX.
 
-Sources that could not be fetched (App Store screenshots, most press sites) are noted as such.
+The dossiers read:
+- real client code (Telegram Web A, Bluesky, Signal Desktop, Discord tokens, Vaul, Primer),
+- Apple HIG JSON,
+- npm packages (`@phosphor-icons/core`, `@radix-ui/colors`, KaTeX),
+- live marketing-site captures,
+- product docs (X Community Notes, Ed, Gradescope, Partiful, Luma).
+
+Values marked *[derived]* were computed by Roster from a cited rule rather than read from an app.
 
 ## 1. Product frame
 
-Roster is "Saturn, for college lectures". The persona (Priya) says it herself: *"In high school Saturn just put me in a chat with my whole AP Bio class on day one."* So **Saturn is the primary reference** for structure, voice and the arrival moment. The chat surface follows the conventions every messaging app shares. Saturn launched for college in 2026 ("The calendar for high school and college", joinsaturn.com, 2026-09-02).
+v1 was one class chat. v2 follows Saturn's shape, many features organised around one student's week, and keeps the 2a research question at the centre: **placed students land in a class chat with no link to find**.
 
-| Decision | Taken from |
-|---|---|
-| The school's colour themes the app (Harvard Crimson `#A51C30`) | Saturn colours each school page with the school's colour (East High `#CF204A`); Fizz themes the in-app UI in the school colour (Stanford red) |
-| One emoji per course, used everywhere it appears | Saturn: 🐸 Biology II, 🎲 AP Statistics, 🍔 Lunch |
-| A gradient tile behind each course emoji | Sidechat groups each carry a `color`; the 15 verified gradient pairs come from sidechat.js |
-| "People are circles, things are squircles" | Discord mobile refresh, Sept 2026 |
-| A countdown pill pinned at the top | Saturn: "24:47 left in 🐸 Biology II" and amber "ENDS IN 24:59" |
-| Avatar stack plus a count on course cards | Saturn calendar card: 4 faces + "32" |
-| Arrival reveal: "Welcome, Priya 🎉" | Saturn school welcome: "Ridgefield High School · Welcome, James! 🎉" |
-| Onboarding order: school → year → classes → arrive | Saturn onboarding (press summaries) |
-| Due-date cards with two actions | Saturn's school-feed event card: "Add" (tinted) and "Send to" (grey) |
-| Course tabs: Chat · PSet · Recaps · Hub | Slack channel tabs (Messages · Canvas · Files · Pins) and Telegram Topics' top bar |
-
-## 2. Tokens
-
-**Type: Plus Jakarta Sans**, 400–800.
-- It is the nearest Google Font to Saturn's heavy geometric grotesk, and Saturn uses one face for the wordmark, headings and UI.
-- Headlines use weight 800 at −0.02em. Tight tracking on headlines is the convergent pattern across Partiful, Granola and Luma.
-- Uppercase micro-labels: 11px, weight 700, +0.06em. From Saturn's "ENDS IN" and "FAVORITES".
-- Countdowns use tabular numerals.
-- Message body: 15px on desktop, 16px on phone, line-height about 1.35. The canonical range is WhatsApp web 15/19 and Telegram 16/21.
-
-**Light theme** (Saturn's 2023 light mode):
-
-| Token | Value | Source |
+| v2 area | Primary reference | What it adds |
 |---|---|---|
-| Canvas | `#F1F3F5` | Saturn light-mode card ground |
-| Sheets | `#FFFFFF`, radius 20 | Saturn white sheet |
-| Ink | `#111318` | — |
-| Meta grey | `#5E636E` | Saturn "8:20–10:15am · Room 501" |
-| Others' bubble | `#EDEFF2` | iMessage light `#E9E9EB` / systemGray5 `#E5E5EA` |
-| Own bubble | Crimson `#A51C30` with white text | School colour. iMessage and WhatsApp tint the sender's own bubbles in the brand colour |
+| Now | Saturn home, Flighty smart states, Things Today | One summary sentence and a now/next hero, then friends, due soon, tasks, today's classes, This Evening, and what's new |
+| Classes | iMessage list, Telegram pinned bar, Ed categories | Every class, plus your House and class-year spaces (auto-placed, the way Saturn places you in your school) |
+| Calendar | Notion Calendar, Google Calendar, Apple Calendar (phone) | Week grid with overlaps split, red now-line, all-day lane for deadlines; phone week strip + day; list |
+| Board | Saturn Bulletin, Fizz school feed, Partiful, Facebook Marketplace | Campus-wide posts: events, study groups, marketplace, lost & found, with RSVPs and comments |
+| People | Saturn friends, Instagram "Follow back", Hinge profiles | Friends with free/in-class status, people who added you, suggestions, directory, schedule compare |
+| Activity, Saved, Tasks | Instagram/Threads activity, Slack Later, Things 3 | Responses to you, saved messages, private tasks |
+| Organizer | Plausible, Stripe Radar, Apple chart doctrine | The research question measured from the log |
 
-**Dark theme** (Saturn's 2026 app):
+## 2. Information architecture
 
-| Token | Value | Source |
-|---|---|---|
-| Navy ground | `#0E1124` | Saturn `#101326` / `#121331` |
-| Glow behind the current item | Crimson radial | Saturn's purple radial `#1C1848 → #231D60`, re-hued to crimson |
-| Countdown amber | `#F5C063` | Saturn |
-| Countdown amber, light theme | `#A86A0B` | Saturn's amber, darkened to pass contrast |
+- **One tree on phone and desktop.** The HIG's `sidebarAdaptable` model; Discord's 2023–26 divergence and reversal is the warning against splitting them (edu-power dossier).
+- **Phone:** a floating capsule tab bar with Now · Classes · Calendar · Board · People. The selected tab gets a fill pill, a filled icon and the accent tint (HIG iOS 26 tab bar). Search, Activity (bell with a count) and You (avatar) sit in the nav bar above the large title, as Saturn puts its inbox icon there.
+  - *Deviation:* the edu dossier's tabs were Classes · Due · Activity · Saved · Search. The Saturn-scale feature set needed Calendar, Board and People as top-level destinations, so Activity and Saved moved to the header and sidebar.
+- **Desktop ≥1024px:** a sidebar with the same destinations, then Classes and Spaces with unread counts (Linear sidebar, Ed course list), and a "me" island at the bottom (Slack, Discord).
+- **Keyboard:**
+  - ⌘K palette with grouped results (Linear, Raycast).
+  - "/" also opens search.
+  - "?" opens the legend (GitHub).
+  - "G then key" navigation (Linear), with G 1–9 for the nth class.
 
-**Semantic colours:**
-- "Free / done" green `#179978` (Saturn).
-- Badge red `#E22647` (Saturn).
-- Online dot `#3D9E60` (Discord status).
+## 3. Visual system
 
-**Sender names:** coloured by hashing the user id into Telegram's seven hues: `#CC5049` `#D67722` `#955CDB` `#40A920` `#309EBA` `#368AD1` `#C7508B` (Telegram Web A). This lets readers scan 300 senders.
+Tokens are in `src/styles.css`, copied from the research token sheet; each group cites its source there.
 
-**Shape:**
-- Sheet 20, Saturn.
-- Elevated card 16, with Saturn's soft shadow.
-- Buttons 12, Saturn's white "Class chat" button.
-- Pills fully rounded.
-- Bubbles 18 with sender-side joins at 6, after Telegram (15 / 6) and GroupMe 2026 (about 20).
-- Course tile is a 12px squircle at 40px, Discord.
+### Type
+- **Mona Sans**, a variable font (width 75–125, weight 400–800). It is GitHub Primer v11's UI face.
+  - Compressed width for course codes and eyebrows; expanded width for countdowns. This is Apple's SF Compressed / Expanded system, as in Apple Sports and Flighty.
+  - Inter, Geist and Plus Jakarta were rejected as scaffold defaults that read as AI-made.
+- **Newsreader serif only for AI recap text.** It stands in for Apple's New York; serif-for-AI follows Claude, Granola and Notion.
+- **Scale:** phone uses iOS Dynamic Type "Large" verbatim (body 17/22, large title 34/41). Desktop uses macOS text styles with Primer's 14px body and Slack's 15/22 for chat.
+- Display sizes get negative tracking (Linear −0.022em).
+- `text-rendering: geometricPrecision` fixes Mona Sans spacing in Chromium.
 
-## 3. The message row
+### Colour
+- **Chrome is monochrome and primary buttons are ink.** Airbnb #222, Partiful #000, Family, Vercel; the HIG says to colour only the one primary action.
+- **Harvard crimson #A51C30 is identity and selection only:** selected tab, links, focus ring, unread badges, the school chip. It is never used for status; iOS red sits 6° of hue away. In dark mode it lifts to #EF656B *[derived, OKLCH]*.
+- **Courses carry colour,** as teams do in Apple Sports and labels in Linear.
+  - 12 hues at constant OKLCH lightness *[derived]*, with Radix's tint / solid / text roles.
+  - Every solid passes ≥4.9:1 with white.
+  - Your own bubble takes the class's solid colour (Messenger / Telegram chat themes).
+- **Semantic text colours** are Primer's (#D1242F, #9A6700, #1A7F37); fills are iOS 26 system colours. Status always ships as a labelled pill or icon, never hue alone.
 
-The base is GroupMe 2026, the app Harvard class chats actually run on today, adjusted to the conventions shared across chat apps:
-- Others: avatar outside the bubble at the top-left. The first bubble of a run carries a header row: **bold name in the sender's colour, plus "4m"** (GroupMe "Alex Carter 4m").
-- Runs merge. Gaps are 2px inside a run and 10px between runs (Telegram 6 / 10, iMessage 3–5 / 12–16).
-- Own messages sit on the right, tinted. The time sits under the last bubble of the run.
-- Replies show as a quote inside the bubble: a 3px bar plus the name and a one-line snippet (WhatsApp, Telegram, GroupMe ↩). Tapping it scrolls to the original and flashes it (Discord highlight).
-- Reaction pills overlap the bubble edge by −8px (WhatsApp) and show counts (GroupMe "🫶 86"). Your own reaction gets a 1px accent border and a tint (Discord).
-- Quick reactions: 6 emoji plus "+" (WhatsApp and iMessage trays). Desktop shows Discord's hover toolbar; phone uses press-and-hold.
-- Day separator: a centered pill reading "Today" / "Yesterday" / "Friday, Oct 2" (WhatsApp, Telegram). The divider copy is "Unread messages" (Telegram).
-- Header subtitle: "142 members, 12 online" (Telegram's `%@ members`, `%@ online`).
-- Typing line: "Maya is typing…" / "Several people are typing…" (Discord strings).
-- Composer: a pill with "+" on the left and the placeholder "Message STAT 110" (Discord "Message #lounge"). A round send button appears once there is text (WhatsApp, iMessage). Replies show "Replying to Maya" above the composer (Telegram "Reply to %@").
-- Pinned bar under the header shows "pin k of N" with a segmented indicator (Telegram). The due date carries Saturn's amber countdown.
-- System lines are muted chips centered in the chat (Telegram service messages).
+### Surfaces
+- iOS grouped fills, not bordered cards: #F2F2F7 behind #FFF, and #000 behind #1C1C1E in dark.
+- Hairlines are 0.5px (iOS separator, Linear).
+- Shadows only on floating layers (Primer floating tokens).
+- Glass only on the floating tab bar and the chat composer (HIG: no glass in the content layer).
 
-## 4. AI lecture recap with classmate corrections
+### Shape
+- Capsule buttons, chips, tab bar and composer (HIG "prefer capsule").
+- Radii ladder 6 / 10 / 14 / 20 / 28; bubbles 20 with joined corners at 6 (Telegram 15/6, GroupMe ~20).
 
-Taken from X **Collaborative Notes**, Granola, Apple Intelligence and Google Docs suggesting mode:
+### Icons and emoji
+- **Phosphor** (`@phosphor-icons/core` 2.1.1): regular weight in lists and toolbars, fill when selected. That is SF Symbols' rule, and only Phosphor ships a fill twin for every icon. Lucide was rejected as the shadcn default with no fill states.
+- **No emoji in chrome.** Board categories use Phosphor glyphs. Emoji stays user content: reactions, statuses, and Partiful-style RSVP choices.
+- **Course tiles are typographic** ("STAT / 110" in compressed type on the course tint). They replace v1's emoji squircles (Linear team keys, Apple Sports abbreviations).
 
-| Element | What it shows | Source |
-|---|---|---|
-| Status row | A dot plus "Needs more checks · 1 open fix · 2d", or "Checked by classmates" | Community Notes statuses: "Note needs more ratings", "currently rated helpful" |
-| AI label | ◉ "Lecture recap · AI-drafted, updates with class corrections · Revision history" | Collaborative Note: "AI-drafted, updates with community input · Revision history" |
-| AI text colour | Grey until classmates check it | Granola: "Your notes stay in black, AI additions appear in gray" |
-| An open fix | Strike-through on the original text, the proposed text underlined, and "Suggested by Nora · 5 agree" | Google Docs suggesting mode, Community Notes rating |
-| Suggest-a-fix panel | A grey band, the label "Suggest a fix", and reason chips "Matches the slides", "Matches what was said", "Clearer wording" | Collaborative Note's "Suggest an improvement" panel, Community Notes helpful-reason tags |
-| Applying fixes | A fix applies on its own once 3 classmates agree and agreement outnumbers disagreement 2 to 1 | Community Notes shows a note only when raters agree |
-| Footer | "Drafted by AI from the organizer's lecture notes. May contain errors." | Apple: "may contain errors"; Wikipedia: "Suggested links are machine-generated, and can be incorrect." |
+### Motion
+- Primer durations (100 / 200 / 300 / 500ms).
+- Spring curves as CSS `linear()`: 414ms smooth and 592ms pop.
+- Sheets: Vaul's `.5s cubic-bezier(.32,.72,0,1)`; they close past 25% drag or a fast flick.
+- Jump button: Telegram's `cubic-bezier(.34,1.56,.64,1)`.
+- `prefers-reduced-motion` is respected.
 
-## 5. Things we deliberately did not take
+## 4. Chat (messaging dossier)
 
-- **Pset status emoji buttons** (Partiful's RSVP mechanic). They would inflate the "reacted at least once" metric beyond what the GroupMe plan in 2a measures. The coach role rejected them as a confound.
-- **AI answers inside the chat.** Assignment 2a scoped these out because they would hide whether students talk to each other.
-- **Anonymous posting** (Fizz, Sidechat). The persona wants to be recognised by a few classmates.
-- **Streak flames, like counts, and sparkle AI icons everywhere.** The trend research lists these as dated or as Duolingo's own.
-- **Harvard marks.** Roster uses the school colour as Saturn and Fizz do, but no shield, logo or official wording. It says "Run by a student. Not affiliated with Harvard or course staff."
+- **Runs:** messages group within 5 minutes (Bluesky). Others' avatars sit outside the bubble; the first bubble carries name, House·year and time (GroupMe).
+- **Replies:** a quote with a 3px rail. Tapping it scrolls to the original and flashes it (WhatsApp, Telegram, Discord highlight).
+- **Swipe to reply:** 56px threshold plus 32px exponential resistance, with a haptic when crossed (Bluesky).
+- **Menus:** long-press opens the menu after 400ms; the desktop hover toolbar has react, reply and more (Slack, Discord).
+- **Reactions:**
+  - Five quick picks plus "+" (Bluesky's set, with ❤️ 😂 🙏 for class use).
+  - The pill pulses 1 → 1.2 → 1 over 500ms.
+  - Up to 3 reactors show as faces, then a count (iMessage tapbacks, Slack).
+- **Typing:** 6px dots, 1600ms loop, 160ms stagger, scale 1.3 at 20% (Signal Desktop). Names list up to 3, then "Several people are typing" (Slack).
+- **Unread:** a "N new messages" divider in the school colour (Slack's red "New" line); a jump pill with a new-count (Telegram).
+- **Polls:**
+  - Vote first, then see results (Telegram anonymous-until-vote).
+  - Bars are normalised to the leader (Discord).
+  - Votes are public, with faces (Slack polls).
+- **Study sessions:**
+  - Partiful card: a date tile, a relative-time chip, faces, and "Mei, Kofi and 1 other going".
+  - Three-way RSVP 👍 Going / 🤔 Maybe / 😢 Can't, where Can't is visible only to the host (Partiful).
+  - Google and Outlook links.
+- **Composer:**
+  - An iMessage pill on glass with "+" for an attach sheet: Photo, Poll, Study session, Lecture notes (Telegram attach menu).
+  - @-mentions with arrow keys (Slack).
+  - Drafts are kept per chat (Telegram).
+- **While you were away:** an extractive digest (most reacted, open questions, shares, mentions). It appears only after 25+ unread or 24h away, and says "Nothing here is written by AI" (AI dossier c).
+
+## 5. Class pages
+
+- **Tabs:** Chat · PSet · Recaps · Notes · Section · People. They are pill tabs, because the visual dossier lists underline tabs as dated.
+- **Pinned bar** with a segmented rail and a live countdown (Telegram pinned messages; Saturn's amber "ENDS IN").
+- **PSet board (Ed, Gradescope, GitHub):**
+  - Problem chips "3(b)" like Gradescope's question chips.
+  - Answered / Open status pills like Ed's.
+  - A "↑ stuck too" counter shaped like GitHub's upvote pill.
+  - Sorting by order, most stuck, or unanswered.
+  - The composer hint "Explain the idea, not the final answer." restates the collaboration policy, which is quoted above the list.
+- **AI recap (Community Notes, Granola):**
+  - Lines stay grey until two classmates check them, then turn ink.
+  - "Fix" opens a reason picker and a Docs-style diff.
+  - A fix replaces the AI's line when 3 classmates agree and agreement outnumbers disagreement 2 to 1.
+  - Wording-only fixes can't replace a line already checked.
+  - Every change is in History.
+- **Notes:** upvote pills with Top / Newest sorting (GitHub Discussions, Ed). Markdown-lite plus math rendered as MathML through KaTeX, with Pandoc's currency-safe `$…$` rule.
+- **Section rooms:** a thread per section slot (WhatsApp Communities, Telegram Topics).
+- **People:** stat tiles that double as filters ("12 from Pfoho", "8 in your section"), then grouped lists: People you know, From your House, Everyone (Partiful guest list, Discord member groups).
+
+## 6. Time (time dossier)
+
+- **Now hero states:** later / soon / starting / in lecture with an "ENDS IN" countdown and progress / just ended / done / free (Flighty smart states, Saturn's in-class card).
+- **Deadline ladder:**
+  - ≥7 days: the date.
+  - 2–6 days: "Fri 5 PM · in 3 days".
+  - Tomorrow: orange.
+  - Today: orange, then red under 1h.
+  - Overdue: "Due 2h ago".
+  - Sources: Things deadline flags, Todoist's tomorrow-orange, Flighty minutes.
+- **Calendar:**
+  - Overlaps split side by side (Google Calendar).
+  - Red now-line with a time label in the gutter (Apple Calendar, Notion Calendar).
+  - "Maybe" events striped (Google Calendar tentative).
+  - Phone uses a week strip with the selected day in a black circle and today in red (iOS Calendar).
+  - Class times come from the catalog and can be fixed per student (Saturn's schedule editor).
+  - "Add to Google Calendar" repeats weekly until the last day of classes.
+- Tabular numerals everywhere a number changes.
+
+## 7. People and community (community dossier)
+
+- **Profile sheet:**
+  - Hinge's vitals row (year, House, concentration) and prompts, with large answers.
+  - Discord's mutual-servers strip ("In common", with "Same section").
+  - A class shelf.
+- **Friends are mutual adds.**
+  - Status and free time show only between mutual friends (Saturn).
+  - Rings show the time left in a friend's class; chips show "Free" or their status (Saturn 2026).
+  - "Added you · Add back" comes from Instagram's follow-back.
+- **Compare schedules:** "Me | Them" columns with shared free blocks (Saturn).
+- **Status picker:** emoji, text and "clear after" (Slack).
+- **Report flow:**
+  - Reasons first, with "Sharing graded answers" listed first.
+  - An optional note, then a done screen that says what happens next (Instagram).
+  - Only the organizer sees reports.
+- **Pledge before posting** (Airbnb's Community Commitment, "Agree and continue"). Reading never needs it.
+
+## 8. Onboarding (onboarding blueprint)
+
+Twelve steps, one question per screen:
+1. Welcome
+2. Classes (search, paste from my.harvard, or scan a screenshot with Claude)
+3. Verified
+4. Name, photo and colour
+5. Year and House
+6. Concentration
+7. Sections
+8. Prompts
+9. Pledge
+10. People you may know
+11. Build
+12. Arrival
+
+The shell for every step:
+- Back chevron, a progress bar, and Skip on optional steps (Cal AI, Duolingo, BeReal).
+- One full-width pill CTA in a fixed position (Finch, Cal AI).
+
+What each step borrows:
+- **Order:** classes come before identity (Saturn, Duolingo; HIG "delay sign-in").
+- **Course rows** show live counts and faces ("142 on Roster"), Saturn's teaser.
+- **Prompts** use Hinge's three-slot picker.
+- **Sections** map answers to rooms, as Discord's onboarding maps answers to channels.
+- **Build:** a checklist where each line ticks only when its write lands. This is Cal AI's "building your plan" moment without fake progress.
+- **Arrival:** "You're in, Priya." with the chats you joined and who's there (Saturn's welcome). The CTA "Say hi in STAT 110" opens the chat with an intro drafted but not sent.
+
+*Deviation:* the blueprint verifies with a Harvard email code. The artifact platform does not expose email to this account, so "verified" means the account belongs to the organization that runs the class rather than being an invited guest. Organizer placement works by picking people from the organization directory, keyed by account id.
+
+## 9. AI and data (AI + data dossier)
+
+- **Recap drafting:**
+  - The organizer pastes notes. Claude is told to use only those notes and the course's own notation.
+  - Lines stream in. Each must be marked Keep, Edit or Remove before posting (Notion AI and Gmail suggestion review).
+  - Status text reads "Reading your notes (N words)…", then "Drafting line 3…".
+- **Research validity rules:**
+  - The catch-up and the weekly story are pull-only and extractive, with no calls to action, so the product doesn't prompt the behaviour being measured.
+  - Poll votes, RSVPs, recap checks and "stuck too" count as light responses and are reported apart from writing.
+  - Organizer activity is excluded everywhere.
+- **Weekly story:** 6 cards with Instagram stories mechanics (progress segments, tap zones, pause) and Spotify Wrapped's one-number cards. It opens only when you tap it.
+- **Organizer results:**
+  - A verdict strip with icon plus words (✓ / ! / ✕ / pending).
+  - Zoned meters with the kill and success lines (Stripe Radar's risk bar).
+  - Pace with a dashed projection (Plausible's comparison line).
+  - Messages per day by cycle, and who showed up: contributed / read only / didn't open. One open per person per day is logged, so readers who never post still count.
+  - A writing-vs-light breakdown, recap fixes, and the exit survey.
+  - Apple's chart doctrine: label directly, one idea per chart.
+- **Export:** a pseudonymous CSV (S001…, no names, no message text) plus a results JSON.
+
+## 10. What was removed from v1 (visual dossier §4.10)
+
+- Plus Jakarta Sans.
+- The crimson gradient band and the navy dark theme.
+- Emoji gradient course tiles.
+- Uppercase grey eyebrows on every section.
+- Underline tabs.
+- Crimson own-bubbles and Telegram-hued sender names: names are ink, and avatars carry identity.
