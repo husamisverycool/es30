@@ -43,6 +43,7 @@ const MOCK = () => {
   const user = {
     me: async () => ({ id: UID, name: NAME, avatarUrl: "", color: "#555", email: q.get("email") || null, isOwner: OWNER, canEdit: OWNER }),
     id: async () => UID, isOwner: async () => OWNER, canEdit: async () => OWNER, can: async () => WRITE,
+    search: async (qq) => [{ id: "u_s1", name: "Sam Student", avatarUrl: "", color: "#444", email: null, isMe: false, guest: false }].filter((p) => qq && p.name.toLowerCase().includes(qq.toLowerCase())),
     profiles: async (ids) => Object.fromEntries([].concat(ids).map((id) => [id, { id, name: "", avatarUrl: "", color: "#8a8f98", email: null, isMe: id === UID, guest: false }])),
   };
   const room = {
@@ -102,7 +103,7 @@ async function onboard(p, { pick, year, house, placed }) {
 }
 
 // ---- organizer sets up the class --------------------------------------------
-const A = await open("uid=u_owner&name=Org%20Anizer&owner=1&email=org@college.harvard.edu");
+const A = await open("uid=u_owner&name=Org%20Anizer&owner=1");
 await A.waitForSelector(".step-welcome");
 check(!(await demoBar(A)), "owner lands in the live class, not the demo");
 await onboard(A, { pick: "stat 110", year: "'28", house: "Lowell" });
@@ -140,15 +141,16 @@ await A.waitForSelector(".recap");
 check((await A.locator(".recap .line").count()) === 3, "removed line isn't posted");
 await A.click('button[aria-label="Organizer tools"]');
 await A.click(".tabs.inset >> text=Placement");
-await A.fill(".dash textarea", "Name, Email\nSam Student, sam@college.harvard.edu\n");
-await A.click("text=Place 1 student");
+await A.fill(".dash .searchwrap input", "sam");
+await A.click(".dash .prow >> text=Pick");
+await A.click("text=Place 1 person");
 await wait(400);
-check((await dbDump(A)).some(([p, d]) => p.startsWith("placements/") && d.courses.includes("stat110") && !JSON.stringify(d).includes("sam@")), "placement stored as a hash, without the address");
+check((await dbDump(A)).some(([p, d]) => p === "placements/u_s1" && d.courses.includes("stat110")), "organizer places a student by picking them from the directory");
 await shot(A, "a4-recap-posted");
 await A.close();
 
 // ---- a placed student joins ------------------------------------------------------
-const B = await open("uid=u_s1&name=Sam%20Student&owner=0&email=sam@college.harvard.edu");
+const B = await open("uid=u_s1&name=Sam%20Student&owner=0");
 await B.waitForSelector(".step-welcome");
 await B.click("text=Get started");
 await B.waitForSelector(".ob-banner");
@@ -199,11 +201,11 @@ await B.click(".sheet-f >> text=Post");
 await wait(400);
 check((await dbDump(B)).some(([p, d]) => p.startsWith("board/") && d.price === "$20"), "board post saved with a price");
 await shot(B, "b2-board");
-check((await dbDump(B)).some(([p, d]) => p === "members/u_s1" && Object.keys(d.visits || {}).length && d.verified === "harvard.edu" && d.pledgeAt), "student's open, verification and pledge are recorded");
+check((await dbDump(B)).some(([p, d]) => p === "members/u_s1" && Object.keys(d.visits || {}).length && d.verified === "org" && d.pledgeAt), "student's open, verification and pledge are recorded");
 await B.close();
 
 // ---- organizer reads the results ----------------------------------------------
-const A2 = await open("uid=u_owner&name=Org%20Anizer&owner=1&email=org@college.harvard.edu");
+const A2 = await open("uid=u_owner&name=Org%20Anizer&owner=1");
 await A2.waitForSelector(".classview, .page");
 await A2.click(".side-c >> text=STAT 110");
 await A2.click('button[aria-label="Organizer tools"]');

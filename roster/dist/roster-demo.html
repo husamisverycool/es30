@@ -1303,7 +1303,8 @@ select.input { padding-right: 34px; background-image: url("data:image/svg+xml,%3
 .verify b { display: block; font: var(--t-headline); overflow-wrap: anywhere; }
 .verify small { display: block; font: var(--t-footnote); color: var(--ink-2); margin-top: 2px; }
 .verify-ic { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: var(--fill-3); color: var(--ink-2); flex: none; }
-.verify.ok .verify-ic { background: var(--success-tint); color: var(--success); animation: pop .592s var(--ease-pop); }
+.verify-ic img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.verify-ok { color: var(--info-fill); display: inline-flex; animation: pop .592s var(--ease-pop); }
 .ob-avatar { display: grid; justify-items: center; gap: 12px; }
 .housegrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .housechip { display: grid; justify-items: center; align-content: center; gap: 2px; height: 58px; border-radius: var(--r-md); background: var(--surface); font: 600 15px/19px var(--font-sans); transition: background var(--dur-short), color var(--dur-short); }
@@ -1869,13 +1870,15 @@ const Runtime = (() => {
     const [db, user, sample, room, downloads] = await Promise.all([
       forceDemo ? null : use("db"), use("user"), use("sample"), forceDemo ? null : use("room"), use("downloads"),
     ]);
-    let me = null, canWrite = null, isOwner = false;
+    let me = null, canWrite = null, isOwner = false, guest = false;
     if (user) {
       try {
         me = await user.me();
         isOwner = !!me.isOwner;
         canWrite = await user.can("data.write");
-      } catch (_) { me = null; }
+        // "Verified" = a member of the organization that owns this artifact (not a guest).
+        if (me.id) { const pr = await user.profiles([me.id]); guest = !!(pr && pr[me.id] && pr[me.id].guest); }
+      } catch (_) { me = me || null; }
     }
     const live = !!(db && me && me.id);
     return {
@@ -1886,6 +1889,7 @@ const Runtime = (() => {
       me,
       uid: me && me.id,
       isOwner,
+      guest,
       // null = the platform said nothing; keep inputs and let a refused write decide.
       canWrite: canWrite === null ? (live ? true : false) : canWrite,
       sample,
@@ -4694,7 +4698,7 @@ function ProfileSheet({ uid, courseId, onClose }) {
       <div class="prof-cover" style=${{ "--av": p.color }}></div>
       <div class="prof-id">
         <span class="prof-av"><${Avatar} uid=${uid} size=${88} online=${app.online.has(uid)} /></span>
-        <h2>${p.name}${m.verified ? html`<span class="verified" title=${"Verified " + m.verified + " email"}><${Icon} name="checkCircle" size=${18} fill=${true} /></span>` : null}</h2>
+        <h2>${p.name}${m.verified ? html`<span class="verified" title=${m.verified === "org" ? "Verified member of the class's organization" : "Verified " + m.verified + " account"}><${Icon} name="checkCircle" size=${18} fill=${true} /></span>` : null}</h2>
         ${app.demo && uid !== app.uid ? html`<span class="pill sm">Example classmate</span>` : null}
         ${st ? html`<span class="prof-status">${st.e} ${st.text} <small>until ${tShort(st.until)}</small></span>` : null}
       </div>
@@ -5427,8 +5431,8 @@ function Onboarding({ onDone }) {
   useEffect(() => { if (placedKey) setPicked((cur) => [...cur, ...placed.filter((p) => !cur.some((c) => c.id === p.id))]); }, [placedKey]);
   const [built, setBuilt] = useState(0);
   const [failed, setFailed] = useState(false);
-  const email = demo ? "priya_raman@college.harvard.edu" : app.viewerEmail || "";
-  const verified = /(^|\.)harvard\.edu$/i.test(email.split("@")[1] || "");
+  // Verified = a member of the organization that runs this class, not an invited guest.
+  const verified = demo || (!!app.uid && !app.viewerGuest);
   const key = OB_STEPS[step];
   const go = (n) => { setDir(n > step ? 1 : -1); setStep(n); };
   const next = () => go(step + 1), back = () => go(Math.max(0, step - 1));
@@ -5444,7 +5448,7 @@ function Onboarding({ onDone }) {
     const ok = await app.joinCourses({
       picked,
       sections,
-      profile: { displayName: name.trim(), year, house, concentration: conc, color, photo, prompts: prompts.filter((p) => p.a && p.a.trim()), following, pledgeAt: Clock.now(), verified: verified ? "harvard.edu" : "" },
+      profile: { displayName: name.trim(), year, house, concentration: conc, color, photo, prompts: prompts.filter((p) => p.a && p.a.trim()), following, pledgeAt: Clock.now(), verified: verified ? (demo ? "harvard.edu" : "org") : "" },
     });
     if (!ok) { setFailed(true); app.setArriving(false); return; }
     for (let n = 2; n <= buildLines.length; n++) await tick(n);
@@ -5483,12 +5487,13 @@ function Onboarding({ onDone }) {
       <${CoursePicker} picked=${picked} setPicked=${setPicked} />`;
     cta = html`<button class="btn primary lg block" disabled=${!picked.length} onClick=${next}>${picked.length ? "Continue with " + plural(picked.length, "class", "classes") : "Pick at least one class"}</button>`;
   } else if (key === "verify") {
-    body = html`<h1 class="ob-h">${verified ? "You're verified." : "Check your school email"}</h1>
-      <p class="ob-sub">${verified ? "Classmates see a check next to your name, so they know you're really at Harvard." : "Roster uses the email on your account to confirm you're at Harvard."}</p>
-      <div class=${"verify" + (verified ? " ok" : "")}><span class="verify-ic"><${Icon} name=${verified ? "checkCircle" : "envelope"} size=${28} fill=${verified} /></span>
-        <div class="grow"><b>${email || "No email shared"}</b><small>${verified ? "Harvard email confirmed" : email ? "Not a harvard.edu address" : "Your account didn't share an email with this page"}</small></div></div>
-      ${verified ? null : html`<p class="muted sm">You can still join. Your profile won't show the check, and the organizer may remove accounts they can't place.</p>`}
-      <p class="muted sm">Your email is never shown to classmates.</p>`;
+    body = html`<h1 class="ob-h">${verified ? "You're verified." : "You're joining as a guest"}</h1>
+      <p class="ob-sub">${verified ? "Your account belongs to the school organization that runs this class, so classmates see a check next to your name." : "Your account was invited from outside the organization that runs this class."}</p>
+      <div class=${"verify" + (verified ? " ok" : "")}><span class="verify-ic">${!demo && app.viewerAvatar ? html`<img src=${app.viewerAvatar} alt="" />` : html`<${Icon} name=${verified ? "checkCircle" : "user"} size=${28} fill=${verified} />`}</span>
+        <div class="grow"><b>${demo ? PRIYA.name : app.viewerName || "Your account"}</b><small>${demo ? "Harvard College · example account" : verified ? "Member of this class's organization" : "Guest account"}</small></div>
+        ${verified ? html`<span class="verify-ok"><${Icon} name="checkCircle" size=${22} fill=${true} /></span>` : null}</div>
+      ${verified ? null : html`<p class="muted sm">You can still join. Your profile won't show the check.</p>`}
+      <p class="muted sm">Roster never sees your email or password.</p>`;
     cta = html`<button class="btn primary lg block" onClick=${next}>Continue</button>`;
   } else if (key === "name") {
     const ref = { current: null };
@@ -5910,28 +5915,47 @@ function HubEditor({ courseId }) {
   </div>`;
 }
 
-// ---- placement by email (one-way hashes, never the address) -------------------------------
+// ---- placement: pick people from the organization's directory (user.search) -------------------
 function Placement({ courseId }) {
   const app = useApp();
-  const [text, setText] = useState("");
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState([]);
+  const [picked, setPicked] = useState([]);
   const [also, setAlso] = useState([]);
   const [done, setDone] = useState(null);
   const [busy, setBusy] = useState(false);
-  const emails = [...new Set((text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []).map((e) => e.toLowerCase()))];
+  const existing = useCollection(() => app.db.collection("placements"), [app.db]) || [];
+  const placedHere = existing.filter((p) => (p.courses || []).includes(courseId));
   const others = app.myCourses.filter((c) => Catalog.isCourse(c) && c !== courseId);
+  const search = async (v) => {
+    setQ(v); setDone(null);
+    if (app.demo) { const t = v.trim().toLowerCase(); setHits(t ? Object.entries(Demo.people).filter(([, p]) => p.name.toLowerCase().includes(t)).slice(0, 8).map(([id, p]) => ({ id, name: p.name, avatarUrl: "" })) : []); return; }
+    if (!app.rt.user) return;
+    const r = await app.rt.user.search(v);
+    setHits((r || []).filter((p) => !p.isMe));
+  };
+  const toggle = (p) => setPicked(picked.some((x) => x.id === p.id) ? picked.filter((x) => x.id !== p.id) : [...picked, p]);
   const go = async () => {
     setBusy(true);
-    const n = app.demo ? emails.length : await app.placeEmails(emails, [courseId, ...also]);
-    setBusy(false);
-    setDone(n);
-    if (n) setText("");
+    const n = await app.placePeople(picked.map((p) => p.id), [courseId, ...also]);
+    setBusy(false); setDone(n);
+    if (n) setPicked([]);
   };
   return html`<div class="dash">
-    <p class="lead">Paste the emails of students who signed up. When someone opens Roster with that email on their account, they start already placed in ${course(app, courseId).code}${also.length ? " and " + also.map((c) => course(app, c).code).join(", ") : ""}: no link to find.</p>
-    <label class="field"><span>Emails <small>${emails.length ? plural(emails.length, "address", "addresses") + " found" : ""}</small></span><textarea class="input mono" rows="6" value=${text} onInput=${(e) => { setText(e.target.value); setDone(null); }} placeholder="Paste a column from your sign-up sheet. Anything that isn't an email is ignored."></textarea></label>
+    <p class="lead">Pick the students who signed up. The next time they open Roster, they start already placed in ${course(app, courseId).code}${also.length ? " and " + also.map((c) => course(app, c).code).join(", ") : ""}: no link to find.</p>
+    <div class="searchwrap"><${Icon} name="search" size=${18} /><input class="grow" placeholder="Search people by name" value=${q} onInput=${(e) => search(e.target.value)} onFocus=${() => !q && search("")} aria-label="Search people" /></div>
+    ${hits.length ? html`<div class="group">${hits.map((p) => {
+      const on = picked.some((x) => x.id === p.id), already = placedHere.some((x) => x.id === p.id);
+      return html`<div class="prow static" key=${p.id}>${p.avatarUrl ? html`<img class="av" style=${{ width: "36px", height: "36px" }} src=${p.avatarUrl} alt="" />` : html`<${Avatar} uid=${p.id} size=${36} name=${p.name} />`}
+        <span class="grow prow-t"><b>${p.name}</b>${p.guest ? html`<small>Guest</small>` : already ? html`<small>Already placed here</small>` : null}</span>
+        <button class=${"btn sm " + (on ? "ghost" : "primary")} disabled=${already} onClick=${() => toggle(p)}>${on ? html`<${Icon} name="check" size=${15} />Picked` : "Pick"}</button></div>`;
+    })}</div>` : q.trim() ? html`<p class="muted sm">No one in your organization matches “${q.trim()}”.</p>` : null}
+    ${picked.length ? html`<div class="picked">${picked.map((p) => html`<span class="pickchip" key=${p.id}><${Avatar} uid=${p.id} size=${22} name=${p.name} />${p.name}<button onClick=${() => toggle(p)} aria-label=${"Remove " + p.name}><${Icon} name="x" size=${14} /></button></span>`)}</div>` : null}
     ${others.length ? html`<div class="field"><span>Also place them in</span><div class="chips">${others.map((c) => html`<button key=${c} class=${"chip" + (also.includes(c) ? " on" : "")} onClick=${() => setAlso(also.includes(c) ? also.filter((x) => x !== c) : [...also, c])}>${course(app, c).code}</button>`)}</div></div>` : null}
-    <div class="row-end"><span class="muted sm grow">Roster stores a one-way hash of each address, not the address.</span><button class="btn primary" disabled=${!emails.length || busy} onClick=${go}>${busy ? "Placing…" : "Place " + plural(emails.length, "student")}</button></div>
-    ${done != null ? html`<div class=${"ob-banner" + (done ? "" : " warn")}><${Icon} name=${done ? "checkCircle" : "warning"} size=${18} />${done ? (app.demo ? "In the live class, " + plural(done, "student") + " would now be placed. (Demo: nothing was stored.)" : "Placed " + plural(done, "student") + ".") : "Nothing was placed."}</div>` : null}
+    <div class="row-end"><span class="muted sm grow">${placedHere.length ? plural(placedHere.length, "person", "people") + " placed in " + course(app, courseId).code + " so far." : "No one placed yet."}${app.demo ? " Demo: nothing leaves this browser." : ""}</span>
+      <button class="btn primary" disabled=${!picked.length || busy} onClick=${go}>${busy ? "Placing…" : "Place " + plural(picked.length, "person", "people")}</button></div>
+    ${done != null ? html`<div class=${"ob-banner" + (done ? "" : " warn")}><${Icon} name=${done ? "checkCircle" : "warning"} size=${18} />${done ? "Placed " + plural(done, "person", "people") + "." : "Nothing was placed."}</div>` : null}
+    <p class="muted sm">Placing someone doesn't share the class with them. Share this page with them too (as a contributor) so they can open it.</p>
   </div>`;
 }
 
@@ -6197,12 +6221,6 @@ function getDemoDB() {
   return demoDB;
 }
 const DEMO_ONLINE = new Set(["maya", "dev", "nora", "mei", "theo", "leila", "kofi", "ana", "zara", "jonah", "sam"].map((k) => "u_demo_" + k));
-const PLACEMENT_SALT = "roster/harvard/2026";
-async function emailHash(email) {
-  const data = new TextEncoder().encode(PLACEMENT_SALT + ":" + String(email).trim().toLowerCase());
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40);
-}
 const errCopy = (e) => {
   const c = e && e.code;
   if (c === "invalid_argument") return "You don't have permission to change that here.";
@@ -6300,10 +6318,10 @@ function Session({ rt, mode, switchMode }) {
     if (!ids.length) return;
     rt.user.profiles(ids).then((ps) => setProfiles((p) => ({ ...p, ...ps }))).catch(() => {});
   }, [members]);
-  // Organizer placement: a hashed email list decides which chats you start in.
+  // Organizer placement: the organizer picks people, and they start already in those chats.
   useEffect(() => {
-    if (demo || !rt.me || !rt.me.email || myDoc === null || (myDoc && Object.keys(myDoc.courses || {}).length)) return;
-    emailHash(rt.me.email).then((h) => db.doc("placements/" + h).get()).then((s) => { if (s.exists) setPlacement(s.data()); }).catch(() => {});
+    if (demo || !uid || myDoc === null || (myDoc && Object.keys(myDoc.courses || {}).length)) return;
+    db.doc("placements/" + uid).get().then((s) => { if (s.exists) setPlacement(s.data()); }).catch(() => {});
   }, [myDoc === null]);
   useEffect(() => {
     if (demo || !rt.room) return;
@@ -6370,7 +6388,7 @@ function Session({ rt, mode, switchMode }) {
     rt, mode, demo, live: !demo, liveOK, db, uid, canWrite, isOrganizerReal, isOrganizer: demo || isOrganizerReal, organizerIds,
     sample: rt.sample, downloads: rt.downloads, members, membersById, me: myDoc || null, myCourses, customCourses, online, person,
     feeds, hubs, fixes, saved, tasks, placement,
-    viewerName: rt.me && rt.me.name, viewerEmail: rt.me && rt.me.email, replyTo, setReplyTo, toast, write, lrVersion,
+    viewerName: rt.me && rt.me.name, viewerAvatar: rt.me && rt.me.avatarUrl, viewerGuest: !!rt.guest, replyTo, setReplyTo, toast, write, lrVersion,
     route, setRoute, sheets,
     open: (kind, props) => setSheets((s) => [...s.filter((x) => x.kind !== kind), { kind, props: props || {}, key: Math.random() }]),
     close: (kind) => setSheets((s) => (kind ? s.filter((x) => x.kind !== kind) : s.slice(0, -1))),
@@ -6554,14 +6572,14 @@ function Session({ rt, mode, switchMode }) {
     deleteBoard: (p) => write(() => db.doc("board/" + p.id).update({ deleted: now() }), "Post removed"),
 
     // ---- organizer ----
-    placeEmails: async (emails, courses) => {
-      const list = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter((e) => /@/.test(e)))];
-      for (const e of list) {
-        const h = await emailHash(e);
-        const ok = await write(() => db.doc("placements/" + h).set({ courses, ts: now() }));
-        if (!ok) return 0;
+    placePeople: async (ids, courses) => {
+      let n = 0;
+      for (const id of [...new Set(ids)]) {
+        const ok = await write(() => db.doc("placements/" + id).set({ courses, ts: now(), by: uid }));
+        if (!ok) return n;
+        n++;
       }
-      return list.length;
+      return n;
     },
   };
   app.setArriving = setArriving;

@@ -13,12 +13,6 @@ function getDemoDB() {
   return demoDB;
 }
 const DEMO_ONLINE = new Set(["maya", "dev", "nora", "mei", "theo", "leila", "kofi", "ana", "zara", "jonah", "sam"].map((k) => "u_demo_" + k));
-const PLACEMENT_SALT = "roster/harvard/2026";
-async function emailHash(email) {
-  const data = new TextEncoder().encode(PLACEMENT_SALT + ":" + String(email).trim().toLowerCase());
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40);
-}
 const errCopy = (e) => {
   const c = e && e.code;
   if (c === "invalid_argument") return "You don't have permission to change that here.";
@@ -116,10 +110,10 @@ function Session({ rt, mode, switchMode }) {
     if (!ids.length) return;
     rt.user.profiles(ids).then((ps) => setProfiles((p) => ({ ...p, ...ps }))).catch(() => {});
   }, [members]);
-  // Organizer placement: a hashed email list decides which chats you start in.
+  // Organizer placement: the organizer picks people, and they start already in those chats.
   useEffect(() => {
-    if (demo || !rt.me || !rt.me.email || myDoc === null || (myDoc && Object.keys(myDoc.courses || {}).length)) return;
-    emailHash(rt.me.email).then((h) => db.doc("placements/" + h).get()).then((s) => { if (s.exists) setPlacement(s.data()); }).catch(() => {});
+    if (demo || !uid || myDoc === null || (myDoc && Object.keys(myDoc.courses || {}).length)) return;
+    db.doc("placements/" + uid).get().then((s) => { if (s.exists) setPlacement(s.data()); }).catch(() => {});
   }, [myDoc === null]);
   useEffect(() => {
     if (demo || !rt.room) return;
@@ -186,7 +180,7 @@ function Session({ rt, mode, switchMode }) {
     rt, mode, demo, live: !demo, liveOK, db, uid, canWrite, isOrganizerReal, isOrganizer: demo || isOrganizerReal, organizerIds,
     sample: rt.sample, downloads: rt.downloads, members, membersById, me: myDoc || null, myCourses, customCourses, online, person,
     feeds, hubs, fixes, saved, tasks, placement,
-    viewerName: rt.me && rt.me.name, viewerEmail: rt.me && rt.me.email, replyTo, setReplyTo, toast, write, lrVersion,
+    viewerName: rt.me && rt.me.name, viewerAvatar: rt.me && rt.me.avatarUrl, viewerGuest: !!rt.guest, replyTo, setReplyTo, toast, write, lrVersion,
     route, setRoute, sheets,
     open: (kind, props) => setSheets((s) => [...s.filter((x) => x.kind !== kind), { kind, props: props || {}, key: Math.random() }]),
     close: (kind) => setSheets((s) => (kind ? s.filter((x) => x.kind !== kind) : s.slice(0, -1))),
@@ -370,14 +364,14 @@ function Session({ rt, mode, switchMode }) {
     deleteBoard: (p) => write(() => db.doc("board/" + p.id).update({ deleted: now() }), "Post removed"),
 
     // ---- organizer ----
-    placeEmails: async (emails, courses) => {
-      const list = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter((e) => /@/.test(e)))];
-      for (const e of list) {
-        const h = await emailHash(e);
-        const ok = await write(() => db.doc("placements/" + h).set({ courses, ts: now() }));
-        if (!ok) return 0;
+    placePeople: async (ids, courses) => {
+      let n = 0;
+      for (const id of [...new Set(ids)]) {
+        const ok = await write(() => db.doc("placements/" + id).set({ courses, ts: now(), by: uid }));
+        if (!ok) return n;
+        n++;
       }
-      return list.length;
+      return n;
     },
   };
   app.setArriving = setArriving;

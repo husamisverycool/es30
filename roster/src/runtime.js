@@ -12,13 +12,15 @@ const Runtime = (() => {
     const [db, user, sample, room, downloads] = await Promise.all([
       forceDemo ? null : use("db"), use("user"), use("sample"), forceDemo ? null : use("room"), use("downloads"),
     ]);
-    let me = null, canWrite = null, isOwner = false;
+    let me = null, canWrite = null, isOwner = false, guest = false;
     if (user) {
       try {
         me = await user.me();
         isOwner = !!me.isOwner;
         canWrite = await user.can("data.write");
-      } catch (_) { me = null; }
+        // "Verified" = a member of the organization that owns this artifact (not a guest).
+        if (me.id) { const pr = await user.profiles([me.id]); guest = !!(pr && pr[me.id] && pr[me.id].guest); }
+      } catch (_) { me = me || null; }
     }
     const live = !!(db && me && me.id);
     return {
@@ -29,6 +31,7 @@ const Runtime = (() => {
       me,
       uid: me && me.id,
       isOwner,
+      guest,
       // null = the platform said nothing; keep inputs and let a refused write decide.
       canWrite: canWrite === null ? (live ? true : false) : canWrite,
       sample,

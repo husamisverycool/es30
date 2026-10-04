@@ -110,8 +110,8 @@ function Onboarding({ onDone }) {
   useEffect(() => { if (placedKey) setPicked((cur) => [...cur, ...placed.filter((p) => !cur.some((c) => c.id === p.id))]); }, [placedKey]);
   const [built, setBuilt] = useState(0);
   const [failed, setFailed] = useState(false);
-  const email = demo ? "priya_raman@college.harvard.edu" : app.viewerEmail || "";
-  const verified = /(^|\.)harvard\.edu$/i.test(email.split("@")[1] || "");
+  // Verified = a member of the organization that runs this class, not an invited guest.
+  const verified = demo || (!!app.uid && !app.viewerGuest);
   const key = OB_STEPS[step];
   const go = (n) => { setDir(n > step ? 1 : -1); setStep(n); };
   const next = () => go(step + 1), back = () => go(Math.max(0, step - 1));
@@ -127,7 +127,7 @@ function Onboarding({ onDone }) {
     const ok = await app.joinCourses({
       picked,
       sections,
-      profile: { displayName: name.trim(), year, house, concentration: conc, color, photo, prompts: prompts.filter((p) => p.a && p.a.trim()), following, pledgeAt: Clock.now(), verified: verified ? "harvard.edu" : "" },
+      profile: { displayName: name.trim(), year, house, concentration: conc, color, photo, prompts: prompts.filter((p) => p.a && p.a.trim()), following, pledgeAt: Clock.now(), verified: verified ? (demo ? "harvard.edu" : "org") : "" },
     });
     if (!ok) { setFailed(true); app.setArriving(false); return; }
     for (let n = 2; n <= buildLines.length; n++) await tick(n);
@@ -166,12 +166,13 @@ function Onboarding({ onDone }) {
       <${CoursePicker} picked=${picked} setPicked=${setPicked} />`;
     cta = html`<button class="btn primary lg block" disabled=${!picked.length} onClick=${next}>${picked.length ? "Continue with " + plural(picked.length, "class", "classes") : "Pick at least one class"}</button>`;
   } else if (key === "verify") {
-    body = html`<h1 class="ob-h">${verified ? "You're verified." : "Check your school email"}</h1>
-      <p class="ob-sub">${verified ? "Classmates see a check next to your name, so they know you're really at Harvard." : "Roster uses the email on your account to confirm you're at Harvard."}</p>
-      <div class=${"verify" + (verified ? " ok" : "")}><span class="verify-ic"><${Icon} name=${verified ? "checkCircle" : "envelope"} size=${28} fill=${verified} /></span>
-        <div class="grow"><b>${email || "No email shared"}</b><small>${verified ? "Harvard email confirmed" : email ? "Not a harvard.edu address" : "Your account didn't share an email with this page"}</small></div></div>
-      ${verified ? null : html`<p class="muted sm">You can still join. Your profile won't show the check, and the organizer may remove accounts they can't place.</p>`}
-      <p class="muted sm">Your email is never shown to classmates.</p>`;
+    body = html`<h1 class="ob-h">${verified ? "You're verified." : "You're joining as a guest"}</h1>
+      <p class="ob-sub">${verified ? "Your account belongs to the school organization that runs this class, so classmates see a check next to your name." : "Your account was invited from outside the organization that runs this class."}</p>
+      <div class=${"verify" + (verified ? " ok" : "")}><span class="verify-ic">${!demo && app.viewerAvatar ? html`<img src=${app.viewerAvatar} alt="" />` : html`<${Icon} name=${verified ? "checkCircle" : "user"} size=${28} fill=${verified} />`}</span>
+        <div class="grow"><b>${demo ? PRIYA.name : app.viewerName || "Your account"}</b><small>${demo ? "Harvard College · example account" : verified ? "Member of this class's organization" : "Guest account"}</small></div>
+        ${verified ? html`<span class="verify-ok"><${Icon} name="checkCircle" size=${22} fill=${true} /></span>` : null}</div>
+      ${verified ? null : html`<p class="muted sm">You can still join. Your profile won't show the check.</p>`}
+      <p class="muted sm">Roster never sees your email or password.</p>`;
     cta = html`<button class="btn primary lg block" onClick=${next}>Continue</button>`;
   } else if (key === "name") {
     const ref = { current: null };

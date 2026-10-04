@@ -303,28 +303,47 @@ function HubEditor({ courseId }) {
   </div>`;
 }
 
-// ---- placement by email (one-way hashes, never the address) -------------------------------
+// ---- placement: pick people from the organization's directory (user.search) -------------------
 function Placement({ courseId }) {
   const app = useApp();
-  const [text, setText] = useState("");
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState([]);
+  const [picked, setPicked] = useState([]);
   const [also, setAlso] = useState([]);
   const [done, setDone] = useState(null);
   const [busy, setBusy] = useState(false);
-  const emails = [...new Set((text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []).map((e) => e.toLowerCase()))];
+  const existing = useCollection(() => app.db.collection("placements"), [app.db]) || [];
+  const placedHere = existing.filter((p) => (p.courses || []).includes(courseId));
   const others = app.myCourses.filter((c) => Catalog.isCourse(c) && c !== courseId);
+  const search = async (v) => {
+    setQ(v); setDone(null);
+    if (app.demo) { const t = v.trim().toLowerCase(); setHits(t ? Object.entries(Demo.people).filter(([, p]) => p.name.toLowerCase().includes(t)).slice(0, 8).map(([id, p]) => ({ id, name: p.name, avatarUrl: "" })) : []); return; }
+    if (!app.rt.user) return;
+    const r = await app.rt.user.search(v);
+    setHits((r || []).filter((p) => !p.isMe));
+  };
+  const toggle = (p) => setPicked(picked.some((x) => x.id === p.id) ? picked.filter((x) => x.id !== p.id) : [...picked, p]);
   const go = async () => {
     setBusy(true);
-    const n = app.demo ? emails.length : await app.placeEmails(emails, [courseId, ...also]);
-    setBusy(false);
-    setDone(n);
-    if (n) setText("");
+    const n = await app.placePeople(picked.map((p) => p.id), [courseId, ...also]);
+    setBusy(false); setDone(n);
+    if (n) setPicked([]);
   };
   return html`<div class="dash">
-    <p class="lead">Paste the emails of students who signed up. When someone opens Roster with that email on their account, they start already placed in ${course(app, courseId).code}${also.length ? " and " + also.map((c) => course(app, c).code).join(", ") : ""}: no link to find.</p>
-    <label class="field"><span>Emails <small>${emails.length ? plural(emails.length, "address", "addresses") + " found" : ""}</small></span><textarea class="input mono" rows="6" value=${text} onInput=${(e) => { setText(e.target.value); setDone(null); }} placeholder="Paste a column from your sign-up sheet. Anything that isn't an email is ignored."></textarea></label>
+    <p class="lead">Pick the students who signed up. The next time they open Roster, they start already placed in ${course(app, courseId).code}${also.length ? " and " + also.map((c) => course(app, c).code).join(", ") : ""}: no link to find.</p>
+    <div class="searchwrap"><${Icon} name="search" size=${18} /><input class="grow" placeholder="Search people by name" value=${q} onInput=${(e) => search(e.target.value)} onFocus=${() => !q && search("")} aria-label="Search people" /></div>
+    ${hits.length ? html`<div class="group">${hits.map((p) => {
+      const on = picked.some((x) => x.id === p.id), already = placedHere.some((x) => x.id === p.id);
+      return html`<div class="prow static" key=${p.id}>${p.avatarUrl ? html`<img class="av" style=${{ width: "36px", height: "36px" }} src=${p.avatarUrl} alt="" />` : html`<${Avatar} uid=${p.id} size=${36} name=${p.name} />`}
+        <span class="grow prow-t"><b>${p.name}</b>${p.guest ? html`<small>Guest</small>` : already ? html`<small>Already placed here</small>` : null}</span>
+        <button class=${"btn sm " + (on ? "ghost" : "primary")} disabled=${already} onClick=${() => toggle(p)}>${on ? html`<${Icon} name="check" size=${15} />Picked` : "Pick"}</button></div>`;
+    })}</div>` : q.trim() ? html`<p class="muted sm">No one in your organization matches “${q.trim()}”.</p>` : null}
+    ${picked.length ? html`<div class="picked">${picked.map((p) => html`<span class="pickchip" key=${p.id}><${Avatar} uid=${p.id} size=${22} name=${p.name} />${p.name}<button onClick=${() => toggle(p)} aria-label=${"Remove " + p.name}><${Icon} name="x" size=${14} /></button></span>`)}</div>` : null}
     ${others.length ? html`<div class="field"><span>Also place them in</span><div class="chips">${others.map((c) => html`<button key=${c} class=${"chip" + (also.includes(c) ? " on" : "")} onClick=${() => setAlso(also.includes(c) ? also.filter((x) => x !== c) : [...also, c])}>${course(app, c).code}</button>`)}</div></div>` : null}
-    <div class="row-end"><span class="muted sm grow">Roster stores a one-way hash of each address, not the address.</span><button class="btn primary" disabled=${!emails.length || busy} onClick=${go}>${busy ? "Placing…" : "Place " + plural(emails.length, "student")}</button></div>
-    ${done != null ? html`<div class=${"ob-banner" + (done ? "" : " warn")}><${Icon} name=${done ? "checkCircle" : "warning"} size=${18} />${done ? (app.demo ? "In the live class, " + plural(done, "student") + " would now be placed. (Demo: nothing was stored.)" : "Placed " + plural(done, "student") + ".") : "Nothing was placed."}</div>` : null}
+    <div class="row-end"><span class="muted sm grow">${placedHere.length ? plural(placedHere.length, "person", "people") + " placed in " + course(app, courseId).code + " so far." : "No one placed yet."}${app.demo ? " Demo: nothing leaves this browser." : ""}</span>
+      <button class="btn primary" disabled=${!picked.length || busy} onClick=${go}>${busy ? "Placing…" : "Place " + plural(picked.length, "person", "people")}</button></div>
+    ${done != null ? html`<div class=${"ob-banner" + (done ? "" : " warn")}><${Icon} name=${done ? "checkCircle" : "warning"} size=${18} />${done ? "Placed " + plural(done, "person", "people") + "." : "Nothing was placed."}</div>` : null}
+    <p class="muted sm">Placing someone doesn't share the class with them. Share this page with them too (as a contributor) so they can open it.</p>
   </div>`;
 }
 
