@@ -1,6 +1,6 @@
 // Builds the single-file artifact: roster/dist/roster.html
 // Usage: node roster/build.mjs
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,7 +17,7 @@ const loader = `
   function go() { if (window.htmPreact) __rosterApp(); else fail(); }
   if (window.htmPreact) return go();
   var s = document.createElement("script");
-  s.src = "https://unpkg.com/htm@3.1.1/preact/standalone.umd.js"; // jsDelivr fallback
+  s.src = "https://unpkg.com/htm@3.1.1/preact/standalone.umd.js"; // fallback copy
   s.onload = go; s.onerror = fail;
   document.head.appendChild(s);
 })();`;
@@ -36,3 +36,19 @@ writeFileSync(join(root, "dist", "roster.html"), live);
 const demo = page("window.ROSTER_FORCE_DEMO = true;", "Roster Demo Class");
 writeFileSync(join(root, "dist", "roster-demo.html"), demo);
 console.log("built dist/roster.html", (live.length / 1024).toFixed(1) + " KB", "and dist/roster-demo.html", (demo.length / 1024).toFixed(1) + " KB");
+
+// Web build for static hosting (Netlify etc.): a full HTML document with the libraries
+// served next to it. No Claude runtime there, so it runs as the demo class.
+const web = join(root, "dist", "web");
+rmSync(web, { recursive: true, force: true });
+mkdirSync(join(web, "vendor"), { recursive: true });
+const cut = demo.indexOf('<div id="app"');
+const headPart = demo.slice(0, cut), bodyPart = demo.slice(cut)
+  .replace("https://cdn.jsdelivr.net/npm/htm@3.1.1/preact/standalone.umd.js", "vendor/htm-preact-standalone.umd.js")
+  .replace("https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js", "vendor/katex.min.js");
+const doc = '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n' +
+  '<meta name="description" content="Roster: every class you take already has a group chat. A demo class with example classmates; nothing you post leaves your browser.">\n' +
+  headPart + "</head>\n<body>\n" + bodyPart + "\n</body>\n</html>\n";
+writeFileSync(join(web, "index.html"), doc);
+for (const f of ["htm-preact-standalone.umd.js", "katex.min.js", "LICENSE-htm", "LICENSE-katex"]) copyFileSync(join(root, "vendor", f), join(web, "vendor", f));
+console.log("built dist/web/index.html", (doc.length / 1024).toFixed(1) + " KB (static hosting, demo class)");
