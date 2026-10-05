@@ -2,16 +2,19 @@
 // separate devices chatting through the real API (local Netlify Blobs), photo upload, identity
 // restore from a placement link, organizer link, results + CSV export, and the demo fallbacks.
 // Usage: PW_MODULE=… node roster/test/netlify-flow.mjs <outDir>
+// BUNDLED=1 runs the deployable one-file function (netlify/functions/api.mjs) instead of the source;
+// it has no API key, so the Claude drafting steps are skipped.
 const { chromium } = await import(process.env.PW_MODULE || "playwright");
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { start } from "./netlify-local.mjs";
 
-const out = (process.argv[2] || "/tmp") + "/netlify";
+const BUNDLED = process.env.BUNDLED === "1";
+const out = (process.argv[2] || "/tmp") + "/netlify" + (BUNDLED ? "-bundled" : "");
 mkdirSync(out, { recursive: true });
 // Stand-in for the Claude call (the real one runs in netlify/functions/api.mjs with ANTHROPIC_API_KEY).
 let draftPrompt = "";
-const server = await start({ apiKey: "test-key", draft: async (prompt) => { draftPrompt = prompt; return { text: "```json\n" + JSON.stringify({ title: "Indicators & the Fundamental Bridge", bullets: [{ text: "The fundamental bridge: $E[I_A] = P(A)$.", ref: "Slide 2" }, { text: "Expected matches in the matching problem is 1 for every n.", ref: "Slide 6" }] }) + "\n```" }; } });
+const server = await start({ bundled: BUNDLED, apiKey: "test-key", draft: async (prompt) => { draftPrompt = prompt; return { text: "```json\n" + JSON.stringify({ title: "Indicators & the Fundamental Bridge", bullets: [{ text: "The fundamental bridge: $E[I_A] = P(A)$.", ref: "Slide 2" }, { text: "Expected matches in the matching problem is 1 for every n.", ref: "Slide 6" }] }) + "\n```" }; } });
 const base = server.url;
 const browser = await chromium.launch();
 const errors = [];
@@ -27,9 +30,8 @@ async function device(name, opts) {
   p.on("console", (m) => { if (m.type() === "error" && !/ERR_FAILED|net::ERR|Failed to load resource/.test(m.text())) errors.push(name + " console: " + m.text()); });
   return p;
 }
-async function onboard(p, { name, pick, year, house }) {
-  await p.waitForSelector(".step-welcome");
-  await p.click("text=Get started");
+async function onboard(p, { name, pick, year, house, organizer }) {
+  if (!organizer) { await p.waitForSelector(".step-welcome"); await p.click("text=Get started"); }
   await p.waitForSelector(".cres");
   if (pick) { await p.fill("#course-q", pick); await p.locator(".cres", { hasText: "STAT 110" }).click(); }
   await p.click(".ob-cta button.primary");
@@ -58,17 +60,28 @@ const A = await device("organizer");
 await A.goto(base);
 await A.waitForSelector(".step-welcome");
 check((await A.locator(".modebar", { hasText: "Demo class" }).count()) === 0, "Netlify build with the function opens the live class");
-await A.click("text=Running this study? Set this class up as the organizer");
+check((await A.locator("h1", { hasText: "You're the first one here" }).count()) === 1, "a fresh site greets its first visitor with class setup");
+await shot(A, "a0-setup");
+await A.click("text=I'm running this class");
 await A.waitForSelector(".toast >> text=You're the organizer");
 check(true, "first visitor can claim the organizer role");
-await onboard(A, { name: "Org Anizer", pick: "stat 110", year: "'28", house: "Lowell" });
+check((await A.locator(".pickchip", { hasText: "STAT 110" }).count()) === 1, "STAT 110 is preselected for the organizer");
+await onboard(A, { name: "Org Anizer", year: "'28", house: "Lowell", organizer: true });
 await shot(A, "a1-arrive");
 await A.click("text=Say hi in STAT 110");
+await A.waitForSelector(".classview");
+check(await until(A, async () => (await A.locator(".tab", { hasText: "This week's pset" }).count()) > 0), "STAT 110 is seeded with a PSet board for this week");
+await A.click(".side-nav >> text=Now");
+check(await until(A, async () => (await A.locator(".orgcheck", { hasText: "Invite your students" }).count()) > 0), "the organizer's home shows the setup checklist");
+await shot(A, "a1b-checklist");
+await A.locator(".side-c", { hasText: "STAT 110" }).click();
 await A.waitForSelector(".classview");
 const orgBtn = A.locator('button[aria-label="Organizer tools"]');
 check(await until(A, async () => (await orgBtn.count()) > 0), "organizer tools appear for the organizer");
 await orgBtn.click();
 await A.click(".tabs.inset >> text=Dates");
+await A.waitForSelector(".dcard .erow input");
+check((await A.locator(".dcard").first().locator(".erow").first().locator("input").first().inputValue()) === "This week's pset" && (await A.locator(".erow.three").count()) === 2, "pset due dates and both experiment cycles are filled in");
 await A.click("text=Add a date");
 const due = A.locator(".dcard").first().locator(".erow").first().locator("input");
 await due.nth(0).fill("PSet 6"); await due.nth(1).fill("2026-10-23T17:00"); await due.nth(2).fill("Gradescope");
@@ -78,6 +91,7 @@ const nt = A.locator(".dcard").last().locator(".erow").last().locator("input");
 await nt.nth(0).fill("PSet 6"); await nt.nth(1).fill("2026-10-23T17:00"); await nt.nth(2).fill("1, 2, 3a, 3b, 4");
 await A.locator(".dcard").last().locator("button", { hasText: /^Add$/ }).click();
 await wait(400);
+if (!BUNDLED) {
 await A.click(".tabs.inset >> text=Recap");
 await A.fill(".dash textarea", "Lecture 10. Indicator random variables again. The fundamental bridge says E[I_A] = P(A) for any event A. Matching problem: n people, n hats, the expected number of matches is 1 no matter n. Slides 2 and 6.");
 await A.click("text=Draft with Claude");
@@ -87,6 +101,7 @@ for (let i = 0; i < 2; i++) await A.locator(".dl").nth(i).locator("button", { ha
 await A.click("text=Post recap to STAT 110");
 await A.waitForSelector(".recap");
 await A.click('button[aria-label="Organizer tools"]');
+}
 await A.click(".tabs.inset >> text=Placement");
 await A.fill(".dash textarea", "Sam Student, sam@college.harvard.edu\nRia Rao");
 await A.click("text=Create 2 links");
@@ -144,14 +159,16 @@ await onboard(C, { year: "'29", house: "Cabot" });
 await C.click("text=Say hi in STAT 110");
 await C.waitForSelector(".classview");
 check(await until(C, async () => (await C.locator(".bub", { hasText: "Hi! I'm Sam" }).count()) > 0), "Ria sees Sam's message from before she joined");
-check((await C.locator(".recap .line").count()) === 2, "Ria sees the organizer's recap");
-await C.locator(".line-acts button", { hasText: "Looks right" }).first().click();
+if (!BUNDLED) {
+  check((await C.locator(".recap .line").count()) === 2, "Ria sees the organizer's recap");
+  await C.locator(".line-acts button", { hasText: "Looks right" }).first().click();
+}
 await C.locator("textarea[id^='composer-stat110-main']").fill("is anyone starting pset 6 tonight?");
 await C.locator(".composer .send").click();
-await C.click(".tab >> text=PSet 6");
-await C.locator(".prob-main", { hasText: "3(b)" }).click();
-const cBox = C.locator("textarea[id^='composer-stat110-pset6']");
-await cBox.fill("for 3(b) is a closed form expected?");
+await C.click(".tab >> text=This week's pset");
+await C.locator(".prob-main").nth(2).click();
+const cBox = C.locator("textarea[id^='composer-stat110-pset-a']");
+await cBox.fill("for 3 is a closed form expected?");
 await C.locator(".composer .send").click();
 await C.click(".tab >> text=Chat");
 await C.click(".cbtn");
@@ -218,6 +235,13 @@ const E = await device("static");
 await E.goto(st.url);
 await E.waitForSelector(".step-welcome");
 check((await E.locator(".modebar", { hasText: "Demo class" }).count()) === 1, "a static-only deploy (no function) falls back to the demo class");
+await E.click(".staticnote");
+await E.waitForSelector("#status");
+check(await until(E, async () => /server is off/.test(await E.locator("#status").innerText())), "…and links to setup steps that say the class server is off");
+await shot(E, "e1-setup-off");
+const S = await device("setup-on");
+await S.goto(base + "setup.html");
+check(await until(S, async () => /server is on/.test(await S.locator("#status").innerText())), "setup page confirms the class server is on for a full deploy");
 await st.stop();
 
 await browser.close();

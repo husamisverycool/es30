@@ -11,7 +11,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const site = join(here, "..", "netlify");
 const req = (m) => import(pathToFileURL(join(site, "node_modules", m)).href);
 
-export async function start({ port = 0, static: serveStatic = true, draft, apiKey = "" } = {}) {
+// bundled: run the deployable netlify/functions/api.mjs (one self-contained file) instead of the
+// source handler; it finds Blobs through the same context Netlify gives every function.
+export async function start({ port = 0, static: serveStatic = true, draft, apiKey = "", bundled = false } = {}) {
   const { getStore } = await req("@netlify/blobs/dist/main.js");
   const { BlobsServer } = await req("@netlify/blobs/dist/server.js");
   const { makeHandler } = await import(pathToFileURL(join(site, "lib", "api-core.mjs")).href);
@@ -24,16 +26,25 @@ export async function start({ port = 0, static: serveStatic = true, draft, apiKe
   let chain = Promise.resolve();
   const atomicFetch = (url, init = {}) => {
     const h = new Headers(init.headers || {});
-    if (process.env.NO_ATOMIC || (!h.has("if-none-match") && !h.has("if-match"))) return fetch(url, init);
-    const run = chain.then(() => fetch(url, init));
+    const f = globalThis.__rosterFetch || fetch;
+    if (process.env.NO_ATOMIC || (!h.has("if-none-match") && !h.has("if-match"))) return f(url, init);
+    const run = chain.then(() => f(url, init));
     chain = run.then(() => {}, () => {});
     return run;
   };
-  const handler = makeHandler({
-    store: (name) => getStore({ name, siteID: "local", token, edgeURL: edge, uncachedEdgeURL: edge, consistency: "strong", fetch: atomicFetch }),
-    env: { ANTHROPIC_API_KEY: apiKey },
-    draft,
-  });
+  let handler;
+  if (bundled) {
+    const ctx = { siteID: "local", token, edgeURL: edge, uncachedEdgeURL: edge, deployID: "local" };
+    globalThis.netlifyBlobsContext = Buffer.from(JSON.stringify(ctx)).toString("base64");
+    if (!globalThis.__rosterFetch) { globalThis.__rosterFetch = globalThis.fetch; globalThis.fetch = (url, init) => (String(url).startsWith(edge) ? atomicFetch : globalThis.__rosterFetch)(url, init); }
+    handler = (await import(pathToFileURL(join(site, "netlify", "functions", "api.mjs")).href + "?t=" + Date.now())).default;
+  } else {
+    handler = makeHandler({
+      store: (name) => getStore({ name, siteID: "local", token, edgeURL: edge, uncachedEdgeURL: edge, consistency: "strong", fetch: atomicFetch }),
+      env: { ANTHROPIC_API_KEY: apiKey },
+      draft,
+    });
+  }
   const stats = { api: 0 };
   const types = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".mjs": "text/javascript", ".toml": "text/plain" };
   const server = createServer(async (nreq, nres) => {
@@ -62,6 +73,6 @@ export async function start({ port = 0, static: serveStatic = true, draft, apiKe
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const s = await start({ port: +(process.argv[2] || 8888) });
+  const s = await start({ port: +(process.argv[2] || 8888), bundled: process.argv.includes("--bundled") });
   console.log("Roster (Netlify build) at " + s.url);
 }

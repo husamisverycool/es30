@@ -18,7 +18,10 @@ Both links are private until you share them from the page's **Share** menu.
 - **Live class:** each placed student gets a personal link that drops them into STAT 110 with no account. Everyone shares one real chat.
 - **Demo class:** for the TF, the same site at `?demo`.
 
-Deploy steps are in [netlify/DEPLOY.md](netlify/DEPLOY.md): import from GitHub with base directory `roster/netlify`, or use the Netlify CLI with `dist/roster-netlify.zip`. A drag-and-drop deploy is static-only, so it can only show the demo class.
+Deploy steps are in [netlify/DEPLOY.md](netlify/DEPLOY.md).
+- `dist/roster-netlify.zip` holds the page plus the class server, pre-bundled into one file with nothing to install. Unzip it and drag the folder onto Netlify while logged in.
+- The other option is to import from GitHub with base directory `roster/netlify`.
+- If a deploy comes up without the server, the site says so and links to `setup.html`, which has the fix.
 
 ## What the MVP does
 

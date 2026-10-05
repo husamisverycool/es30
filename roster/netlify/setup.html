@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Turn on your class</title>
+<meta name="description" content="How to switch on the live Roster class on Netlify. No code.">
+<style>
+  :root { --bg: #F2F2F7; --surface: #fff; --ink: #1C1C1E; --ink-2: #6C6C70; --line: rgba(60,60,67,.18); --accent: #A51C30; --ok: #1A7F37; --ok-tint: #E6F6EA; --warn: #9A5B00; --warn-tint: #FFF4E5; --code: #F2F2F7; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #000; --surface: #1C1C1E; --ink: #F5F5F7; --ink-2: #AEAEB2; --line: rgba(235,235,245,.16); --accent: #EF656B; --ok: #30D158; --ok-tint: rgba(48,209,88,.14); --warn: #FF9230; --warn-tint: rgba(255,146,48,.14); --code: #2C2C2E; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 30px; line-height: 1.15; margin: 0 0 8px; letter-spacing: -.02em; }
+  h2 { font-size: 19px; margin: 0 0 4px; }
+  p { margin: 0 0 12px; }
+  .lead { color: var(--ink-2); font-size: 17px; }
+  .card { background: var(--surface); border-radius: 18px; padding: 20px; margin: 16px 0; }
+  .card .sub { color: var(--ink-2); font-size: 14px; margin-bottom: 12px; }
+  ol { margin: 0; padding-left: 22px; }
+  li { margin: 8px 0; }
+  code, .pill { font: 600 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); padding: 2px 7px; border-radius: 7px; overflow-wrap: anywhere; }
+  b { font-weight: 600; }
+  a { color: var(--accent); }
+  .status { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px; background: var(--warn-tint); color: var(--warn); font-weight: 600; }
+  .status.on { background: var(--ok-tint); color: var(--ok); }
+  .status span { flex: 1; }
+  .status small { display: block; font-weight: 400; color: var(--ink-2); }
+  button, .btn { appearance: none; border: 0; border-radius: 12px; padding: 10px 16px; font: 600 15px/1.2 inherit; font-family: inherit; cursor: pointer; background: var(--accent); color: #fff; text-decoration: none; display: inline-block; }
+  .btn.ghost, button.ghost { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1px var(--line); }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+  .ok-sign { border-left: 3px solid var(--ok); padding-left: 12px; color: var(--ink-2); font-size: 15px; margin-top: 12px; }
+  .fine { color: var(--ink-2); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Turn on your live class</h1>
+  <p class="lead">The page is online. The live class also needs its small server, which comes in the same zip. Without it, only the demo class works. Switching it on takes about 3 minutes and no code.</p>
+
+  <div class="status" id="status"><span>Checking the class server…</span></div>
+
+  <section class="card">
+    <h2>1. Drop it again, logged in</h2>
+    <p class="sub">Log in first. Without an account, Netlify publishes the page but not the server.</p>
+    <ol>
+      <li>Go to <a href="https://app.netlify.com" target="_blank" rel="noopener">app.netlify.com</a> and log in. If you don't have an account, sign up free with your email or GitHub.</li>
+      <li>On your computer, double-click <b>roster-netlify.zip</b>. You get a folder called <b>roster-netlify</b>.</li>
+      <li>In Netlify, open <b>Projects</b>. At the bottom is a box that says you can drag and drop your project folder. Drag the <b>roster-netlify</b> folder onto it.</li>
+      <li>Wait until it says <b>Published</b>, then open the link Netlify gives you.</li>
+    </ol>
+    <p class="ok-sign">It worked if the first screen says <b>"Your class is live. You're the first one here."</b> This page also turns green.</p>
+  </section>
+
+  <section class="card">
+    <h2>2. Still demo only? Connect GitHub instead</h2>
+    <p class="sub">This always sets up the server.</p>
+    <ol>
+      <li>In Netlify, click <b>Add new project</b>, then <b>Import an existing project</b>, then <b>GitHub</b>. Let Netlify see your repositories.</li>
+      <li>Pick the <b>es30</b> repository.</li>
+      <li>Set <b>Branch to deploy</b> to <code>claude/vibe-coding-mvps-twhakh</code>.</li>
+      <li>Set <b>Base directory</b> to <code>roster/netlify</code>. Leave everything else as it is.</li>
+      <li>Click <b>Deploy</b>, wait about a minute, then open the link.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>Once it's live</h2>
+    <ol>
+      <li><b>Open the site yourself before you share it.</b> Click <b>I'm running this class</b>. The first person to click it becomes the organizer.</li>
+      <li>Finish the short setup. STAT 110's pset dates and the two experiment cycles are filled in for you.</li>
+      <li>Your home screen shows a checklist:
+        <ul>
+          <li>Paste your students' names to get a personal link for each one.</li>
+          <li>Text or email each student their own link.</li>
+          <li>Save your organizer link.</li>
+        </ul>
+      </li>
+      <li>For your submission and your TF, use the demo link <code id="demolink">your-site.netlify.app/?demo</code>. It's a copy with example classmates that anyone can try without joining your real class.</li>
+    </ol>
+  </section>
+
+  <div class="row"><a class="btn" href="./">Back to Roster</a><a class="btn ghost" href="./?demo">Open the demo class</a><button class="ghost" id="again" type="button">Check again</button></div>
+  <p class="fine" style="margin-top:24px">Optional, for AI recap drafts: in Netlify, open <b>Project configuration → Environment variables</b>, add <code>ANTHROPIC_API_KEY</code> with your key, then deploy again. Without a key, the organizer writes recap lines by hand.</p>
+</main>
+<script>
+  (function () {
+    var el = document.getElementById("status");
+    var demo = document.getElementById("demolink");
+    var base = location.origin + location.pathname.replace(/setup\.html$/, "");
+    if (location.protocol !== "file:") demo.textContent = base + "?demo";
+    function check() {
+      el.className = "status";
+      el.innerHTML = "<span>Checking the class server…</span>";
+      fetch("api/hello", { cache: "no-store" }).then(function (r) {
+        if (!r.ok || !/json/.test(r.headers.get("content-type") || "")) throw 0;
+        return r.json();
+      }).then(function (j) {
+        if (!j || !j.roster) throw 0;
+        el.className = "status on";
+        el.innerHTML = "<span>The class server is on.<small>" + (j.hasOrganizer ? "The class has an organizer. Open Roster to continue." : "Open Roster and click “I'm running this class” to set it up.") + "</small></span>";
+      }).catch(function () {
+        el.className = "status";
+        el.innerHTML = "<span>The class server is off on this copy.<small>Only the demo works here. Follow step 1 below, or step 2 if step 1 doesn't do it.</small></span>";
+      });
+    }
+    document.getElementById("again").onclick = check;
+    check();
+  })();
+</script>
+</body>
+</html>

@@ -383,6 +383,27 @@ function Session({ rt, mode, switchMode }) {
       try { const r = await rt.remote.createPlacements(people, courses); rt.remote.resync(); return r.placements; }
       catch (e) { toast(errCopy(e)); return null; }
     },
+    // Web build: a new organizer's classes start with working dates, so the experiment runs
+    // without any setup (Stat 110 psets are due Fridays at 5 PM on Gradescope).
+    seedClass: async (cid) => {
+      if (!Catalog.isCourse(cid)) return;
+      const ref = db.doc("hub/" + cid);
+      try { if ((await ref.get()).exists) return; } catch (_) { return; }
+      const t = now();
+      const day0 = Sched.startOfDay(t), wd = Sched.et(day0 + 12 * 3600e3).wd;
+      const friAt = (k) => { const p = Sched.et(Sched.addDays(day0, k) + 12 * 3600e3); return Sched.at(p.y, p.mo, p.d, 17 * 60); };
+      let k = (5 - wd + 7) % 7, fri = friAt(k);
+      if (fri - t < 3 * 864e5) { k += 7; fri = friAt(k); }
+      const fri2 = friAt(k + 7);
+      const isStat = cid === "stat110";
+      await write(() => ref.set({
+        due: isStat ? [{ id: "d1", title: "This week's pset", at: fri, where: "Gradescope" }, { id: "d2", title: "Next week's pset", at: fri2, where: "Gradescope" }] : [],
+        cycles: [{ id: "c1", label: "Pset cycle 1", start: t, end: fri }, { id: "c2", label: "Pset cycle 2", start: fri, end: fri2 }],
+        rules: ["Collaboration follows the course syllabus: talk through ideas, write up your own solutions.", "No posting solutions or answers to graded problems before the deadline.", "This chat is run by a student. Course staff are not in it."],
+        links: [],
+      }));
+      if (isStat) await write(() => db.doc("courses/" + cid + "/threads/pset-a").set({ title: "This week's pset", kind: "pset", due: fri, problems: ["1", "2", "3", "4", "5", "6"], ts: t, by: uid }));
+    },
     claimOrganizer: async () => {
       try { await rt.remote.claimOrganizer(); await rt.remote.resync(); toast("You're the organizer. Save your organizer link from Organizer tools → Placement."); return true; }
       catch (e) { toast(e && e.code === "already_exists" ? "This class already has an organizer." : errCopy(e)); return false; }

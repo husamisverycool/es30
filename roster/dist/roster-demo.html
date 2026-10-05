@@ -1447,6 +1447,23 @@ select.input { padding-right: 34px; background-image: url("data:image/svg+xml,%3
 .olink code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px/1.4 var(--font-mono); padding: 8px 10px; border-radius: 10px; background: var(--fill-4); }
 @media (max-width: 600px) { .plrow .btn.ghost { display: none; } }
 
+/* Web build: organizer setup checklist (Now) and the static-deploy note (onboarding) */
+.orgcheck { padding: 4px 16px 8px; border: 1px solid var(--separator); }
+.orgcheck-h { display: flex; align-items: center; gap: 10px; padding: 12px 0 8px; color: var(--accent); }
+.orgcheck-h b { display: block; font: var(--t-headline); color: var(--ink); }
+.orgcheck-h small { display: block; font: var(--t-footnote); color: var(--ink-2); }
+.orgstep { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: .5px solid var(--separator); }
+.orgstep-dot { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--ink-3); display: grid; place-items: center; color: #fff; }
+.orgstep.done .orgstep-dot { background: var(--success-fill); border-color: transparent; }
+.orgstep.done .orgstep-t b { color: var(--ink-2); }
+.orgstep-t { min-width: 0; }
+.orgstep-t b { display: block; font: var(--t-subhead); font-weight: 600; }
+.orgstep-t small { display: block; font: var(--t-footnote); color: var(--ink-2); }
+.olink-code { display: block; margin-top: 6px; font: 400 12px/1.4 var(--font-mono); padding: 6px 8px; border-radius: 8px; background: var(--fill-4); overflow-wrap: anywhere; user-select: all; }
+.orgstep .btn { flex: none; }
+.staticnote { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: var(--fill-4); color: var(--ink-2); font: var(--t-footnote); text-align: left; text-decoration: none; }
+.staticnote b { color: var(--ink); }
+
 </style>
 <div id="app" class="app-root">
   <div class="boot">
@@ -4212,6 +4229,7 @@ function NowView() {
   return html`<div class="page">
     <${PageHead} title=${F.wlmd.format(now)} sub=${summary} />
     <div class="scroller page-scroll"><div class="page-in now">
+      ${app.web && app.isOrganizerReal ? html`<${OrgChecklist} />` : null}
       <${NowHero} H=${H} />
       ${liveNow.map((e) => html`<div class="livecard" key=${e.key}><span class="eyebrow live"><i class="pulse-dot"></i>Happening now${e.cid ? " · " + course(app, e.cid).code : " · Board"}</span><${EventCard} m=${e.m} courseId=${e.cid} /></div>`)}
       <${FriendsRow} />
@@ -4263,6 +4281,42 @@ function NowHero({ H }) {
   return html`<section class="hero quiet">
     <span class="chip-allday">${H.s === "done" ? "Done for today" : Sched.et(now).wd === 0 || Sched.et(now).wd === 6 ? "No classes · Weekend" : "No classes today"}</span>
     ${n ? html`<button class="hero-row hero-next" onClick=${() => app.openCourse(n.cid)}><${Tile} courseId=${n.cid} size=${36} /><div class="grow"><small>First class next</small><b>${course(app, n.cid).code} · ${dayLabel(n.start)} ${tShort(n.start)}</b></div><${Icon} name="chevronRight" size=${18} /></button>` : null}
+  </section>`;
+}
+
+// Web build, organizer only: the few steps between "site is up" and "students are in the chat".
+function OrgChecklist() {
+  const app = useApp();
+  const KEY = "roster:web:setup";
+  const [seen, setSeen] = useState(() => { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (_) { return {}; } });
+  const [olink, setOlink] = useState(null);
+  const mark = (k) => { const v = { ...seen, [k]: true }; setSeen(v); try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (_) { /* private mode */ } };
+  const cid = app.myCourses.includes("stat110") ? "stat110" : app.myCourses.find((c) => Catalog.isCourse(c));
+  const placed = (useCollection(() => app.db.collection("placements"), [app.db]) || []).filter((p) => !cid || (p.courses || []).includes(cid));
+  if (seen.hidden || !cid) return null;
+  const joined = placed.filter((p) => p.claimedBy).length;
+  const code = course(app, cid).code;
+  const demoLink = location.origin + location.pathname + "?demo";
+  const cyc = (app.hubs[cid] && app.hubs[cid].cycles) || [];
+  const copy = (txt, msg, k) => navigator.clipboard.writeText(txt).then(() => { app.toast(msg); if (k) mark(k); }, () => app.toast("Copy isn't available here. Select the text instead."));
+  const org = (tab, k) => { if (k) mark(k); app.open("organizer", { courseId: cid, tab }); };
+  const showLink = async () => { try { const l = await app.rt.remote.organizerLink(); setOlink(l); } catch (e) { app.toast(errCopy(e)); } };
+  const steps = [
+    { k: "dates", done: seen.dates, t: "Check the dates", s: cyc.length >= 2 ? "Pset cycle 1 ends " + dayLabel(cyc[0].end) + " " + tShort(cyc[0].end) + ", cycle 2 ends " + dayLabel(cyc[1].end) + ". Change them if your class differs." : "Set the two pset cycles your research question measures.", act: html`<button class="btn sm ghost" onClick=${() => org("dates", "dates")}>Open dates</button>` },
+    { k: "place", done: placed.length > 0, t: placed.length ? plural(placed.length, "student") + " invited · " + joined + " joined" : "Invite your students", s: placed.length ? "Send each student their own link. They land in " + code + " with nothing to find." : "Paste your sign-up list. Each student gets a personal link straight into " + code + ".", act: html`<button class=${"btn sm " + (placed.length ? "ghost" : "primary")} onClick=${() => org("place")}>${placed.length ? "Manage links" : "Add students"}</button>` },
+    { k: "olink", done: seen.olink, t: "Save your organizer link", s: "Your way back in as the organizer on your phone or another browser. Keep it private.",
+      act: olink ? html`<button class="btn sm soft" onClick=${() => copy(olink, "Organizer link copied. Save it somewhere private.", "olink")}><${Icon} name="copy" size=${15} />Copy</button>` : html`<button class="btn sm ghost" onClick=${showLink}>Show link</button>`,
+      extra: olink ? html`<code class="olink-code">${olink}</code>` : null },
+    { k: "demo", done: seen.demo, t: "Link for your TF and the submission", s: "A demo copy with example classmates, so anyone can try it without joining your real class.", act: html`<button class="btn sm ghost" onClick=${() => copy(demoLink, "Demo link copied", "demo")}><${Icon} name="copy" size=${15} />Copy</button>`, extra: html`<code class="olink-code">${demoLink}</code>` },
+    { k: "results", done: seen.results, t: "Watch the results", s: "Who posted, replied or reacted in cycle 1, and who came back in cycle 2. Updates live.", act: html`<button class="btn sm ghost" onClick=${() => org("results", "results")}>Open results</button>` },
+  ];
+  const left = steps.filter((x) => !x.done).length;
+  return html`<section class="card orgcheck">
+    <div class="orgcheck-h"><${Icon} name="target" size=${20} /><span class="grow"><b>Set up your study</b><small>${left ? left + " of " + steps.length + " left · only you see this" : "All set. Hide this whenever you like."}</small></span>
+      <button class="link" onClick=${() => mark("hidden")}>Hide</button></div>
+    ${steps.map((x) => html`<div class=${"orgstep" + (x.done ? " done" : "")} key=${x.k}>
+      <span class="orgstep-dot">${x.done ? html`<${Icon} name="check" size=${13} />` : null}</span>
+      <span class="grow orgstep-t"><b>${x.t}</b><small>${x.s}</small>${x.extra || null}</span>${x.act}</div>`)}
   </section>`;
 }
 
@@ -5640,6 +5694,7 @@ function Onboarding({ onDone }) {
   const [picked, setPicked] = useState(demo ? PRIYA.courses.map((id) => ({ id })) : placed);
   const [name, setName] = useState(demo ? PRIYA.name : (app.placement && app.placement.name) || app.viewerName || "");
   const [orgBusy, setOrgBusy] = useState(false);
+  const [setupChoice, setSetupChoice] = useState(null);
   const [color, setColor] = useState(demo ? PRIYA.color : SWATCHES[hash(app.uid || "") % SWATCHES.length]);
   const [photo, setPhoto] = useState("");
   const [year, setYear] = useState(demo ? PRIYA.year : "");
@@ -5674,6 +5729,7 @@ function Onboarding({ onDone }) {
       profile: { displayName: name.trim(), year, house, concentration: conc, color, photo, prompts: prompts.filter((p) => p.a && p.a.trim()), following, pledgeAt: Clock.now(), verified: verified ? (demo ? "harvard.edu" : app.web ? (app.isOrganizerReal ? "organizer" : "placed") : "org") : "" },
     });
     if (!ok) { setFailed(true); app.setArriving(false); return; }
+    if (app.web && app.isOrganizerReal) for (const p of picked) await app.seedClass(p.id);
     for (let n = 2; n <= buildLines.length; n++) await tick(n);
     setTimeout(() => go(OB_STEPS.indexOf("arrive")), 450);
   };
@@ -5690,7 +5746,20 @@ function Onboarding({ onDone }) {
 
   // ---- steps ----
   let body, cta = null;
-  if (key === "welcome") {
+  if (key === "welcome" && app.web && app.rt.hello && !app.rt.hello.hasOrganizer && !app.isOrganizerReal && setupChoice !== "student") {
+    // The first person to open a fresh deploy: almost always the person running the study.
+    body = html`<div class="ob-welcome">
+      <div class="ob-tiles" aria-hidden="true">${["stat110"].map((id) => html`<span key=${id} class="ob-tile" style=${{ "--r": "-6deg", "--y": "0px", "--d": "0ms" }}><${Tile} courseId=${id} size=${84} /></span>`)}</div>
+      <h1 class="ob-h1">Your class is live. You're the first one here.</h1>
+      <p class="ob-sub">If you're running this study, set the class up now. It takes a minute: you'll pick STAT 110, and Roster fills in the pset dates and the two experiment cycles for you.</p>
+      <ul class="ob-points">
+        <li><span class="ob-pi" style=${{ background: "var(--c2-solid)" }}><${Icon} name="userPlus" size=${18} fill=${true} /></span><div><b>Then invite students</b><span>Paste names and send each person their own link. Opening it puts them straight into the class chat.</span></div></li>
+        <li><span class="ob-pi" style=${{ background: "var(--c8-solid)" }}><${Icon} name="chart" size=${18} /></span><div><b>Watch the results</b><span>Who posted, replied or reacted in each pset cycle, measured against your 35% and 50% lines.</span></div></li>
+      </ul>
+    </div>`;
+    cta = html`<button class="btn primary lg block" disabled=${orgBusy} onClick=${async () => { setOrgBusy(true); const ok = await app.claimOrganizer(); setOrgBusy(false); if (ok) { setPicked((cur) => (cur.some((c) => c.id === "stat110") ? cur : [{ id: "stat110" }, ...cur])); next(); } }}>${orgBusy ? "Setting up…" : "I'm running this class"}</button>
+      <button class="btn ghost block" onClick=${() => setSetupChoice("student")}>I'm a student</button>`;
+  } else if (key === "welcome") {
     body = html`<div class="ob-welcome">
       <div class="ob-tiles" aria-hidden="true">${["stat110", "lifesci1a", "expos20", "gened1079"].map((id, i) => html`<span key=${id} class="ob-tile" style=${{ "--r": [-12, 5, -4, 11][i] + "deg", "--y": [10, -6, 14, 0][i] + "px", "--d": i * 90 + "ms" }}><${Tile} courseId=${id} size=${72} /></span>`)}</div>
       <h1 class="ob-h1">Your classes already have a group chat.</h1>
@@ -5703,7 +5772,7 @@ function Onboarding({ onDone }) {
     </div>`;
     cta = html`<button class="btn primary lg block" onClick=${next}>Get started</button>
       ${app.live ? html`<button class="btn ghost block" onClick=${() => app.switchMode("demo")}>Just looking? Open the demo class</button>` : null}
-      ${app.web && app.rt.hello && !app.rt.hello.hasOrganizer && !app.isOrganizerReal ? html`<button class="link center" disabled=${orgBusy} onClick=${async () => { setOrgBusy(true); await app.claimOrganizer(); setOrgBusy(false); }}>Running this study? Set this class up as the organizer</button>` : null}
+      ${app.rt.webStatic ? html`<a class="staticnote" href="setup.html"><${Icon} name="info" size=${16} /><span class="grow"><b>Running a study?</b> This copy has no class server yet, so only the demo works. Here's how to switch the live class on.</span><${Icon} name="chevronRight" size=${14} /></a>` : null}
       <p class="fine">Run by a student for ES30. Not affiliated with Harvard or course staff.</p>`;
   } else if (key === "classes") {
     body = html`<h1 class="ob-h">What are you taking?</h1><p class="ob-sub">Fall 2026. Pick every class you want a chat for.</p>
@@ -6876,6 +6945,27 @@ function Session({ rt, mode, switchMode }) {
       if (!canWrite || !rt.remote) return null;
       try { const r = await rt.remote.createPlacements(people, courses); rt.remote.resync(); return r.placements; }
       catch (e) { toast(errCopy(e)); return null; }
+    },
+    // Web build: a new organizer's classes start with working dates, so the experiment runs
+    // without any setup (Stat 110 psets are due Fridays at 5 PM on Gradescope).
+    seedClass: async (cid) => {
+      if (!Catalog.isCourse(cid)) return;
+      const ref = db.doc("hub/" + cid);
+      try { if ((await ref.get()).exists) return; } catch (_) { return; }
+      const t = now();
+      const day0 = Sched.startOfDay(t), wd = Sched.et(day0 + 12 * 3600e3).wd;
+      const friAt = (k) => { const p = Sched.et(Sched.addDays(day0, k) + 12 * 3600e3); return Sched.at(p.y, p.mo, p.d, 17 * 60); };
+      let k = (5 - wd + 7) % 7, fri = friAt(k);
+      if (fri - t < 3 * 864e5) { k += 7; fri = friAt(k); }
+      const fri2 = friAt(k + 7);
+      const isStat = cid === "stat110";
+      await write(() => ref.set({
+        due: isStat ? [{ id: "d1", title: "This week's pset", at: fri, where: "Gradescope" }, { id: "d2", title: "Next week's pset", at: fri2, where: "Gradescope" }] : [],
+        cycles: [{ id: "c1", label: "Pset cycle 1", start: t, end: fri }, { id: "c2", label: "Pset cycle 2", start: fri, end: fri2 }],
+        rules: ["Collaboration follows the course syllabus: talk through ideas, write up your own solutions.", "No posting solutions or answers to graded problems before the deadline.", "This chat is run by a student. Course staff are not in it."],
+        links: [],
+      }));
+      if (isStat) await write(() => db.doc("courses/" + cid + "/threads/pset-a").set({ title: "This week's pset", kind: "pset", due: fri, problems: ["1", "2", "3", "4", "5", "6"], ts: t, by: uid }));
     },
     claimOrganizer: async () => {
       try { await rt.remote.claimOrganizer(); await rt.remote.resync(); toast("You're the organizer. Save your organizer link from Organizer tools → Placement."); return true; }

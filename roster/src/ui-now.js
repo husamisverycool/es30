@@ -45,6 +45,7 @@ function NowView() {
   return html`<div class="page">
     <${PageHead} title=${F.wlmd.format(now)} sub=${summary} />
     <div class="scroller page-scroll"><div class="page-in now">
+      ${app.web && app.isOrganizerReal ? html`<${OrgChecklist} />` : null}
       <${NowHero} H=${H} />
       ${liveNow.map((e) => html`<div class="livecard" key=${e.key}><span class="eyebrow live"><i class="pulse-dot"></i>Happening now${e.cid ? " · " + course(app, e.cid).code : " · Board"}</span><${EventCard} m=${e.m} courseId=${e.cid} /></div>`)}
       <${FriendsRow} />
@@ -96,6 +97,42 @@ function NowHero({ H }) {
   return html`<section class="hero quiet">
     <span class="chip-allday">${H.s === "done" ? "Done for today" : Sched.et(now).wd === 0 || Sched.et(now).wd === 6 ? "No classes · Weekend" : "No classes today"}</span>
     ${n ? html`<button class="hero-row hero-next" onClick=${() => app.openCourse(n.cid)}><${Tile} courseId=${n.cid} size=${36} /><div class="grow"><small>First class next</small><b>${course(app, n.cid).code} · ${dayLabel(n.start)} ${tShort(n.start)}</b></div><${Icon} name="chevronRight" size=${18} /></button>` : null}
+  </section>`;
+}
+
+// Web build, organizer only: the few steps between "site is up" and "students are in the chat".
+function OrgChecklist() {
+  const app = useApp();
+  const KEY = "roster:web:setup";
+  const [seen, setSeen] = useState(() => { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (_) { return {}; } });
+  const [olink, setOlink] = useState(null);
+  const mark = (k) => { const v = { ...seen, [k]: true }; setSeen(v); try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (_) { /* private mode */ } };
+  const cid = app.myCourses.includes("stat110") ? "stat110" : app.myCourses.find((c) => Catalog.isCourse(c));
+  const placed = (useCollection(() => app.db.collection("placements"), [app.db]) || []).filter((p) => !cid || (p.courses || []).includes(cid));
+  if (seen.hidden || !cid) return null;
+  const joined = placed.filter((p) => p.claimedBy).length;
+  const code = course(app, cid).code;
+  const demoLink = location.origin + location.pathname + "?demo";
+  const cyc = (app.hubs[cid] && app.hubs[cid].cycles) || [];
+  const copy = (txt, msg, k) => navigator.clipboard.writeText(txt).then(() => { app.toast(msg); if (k) mark(k); }, () => app.toast("Copy isn't available here. Select the text instead."));
+  const org = (tab, k) => { if (k) mark(k); app.open("organizer", { courseId: cid, tab }); };
+  const showLink = async () => { try { const l = await app.rt.remote.organizerLink(); setOlink(l); } catch (e) { app.toast(errCopy(e)); } };
+  const steps = [
+    { k: "dates", done: seen.dates, t: "Check the dates", s: cyc.length >= 2 ? "Pset cycle 1 ends " + dayLabel(cyc[0].end) + " " + tShort(cyc[0].end) + ", cycle 2 ends " + dayLabel(cyc[1].end) + ". Change them if your class differs." : "Set the two pset cycles your research question measures.", act: html`<button class="btn sm ghost" onClick=${() => org("dates", "dates")}>Open dates</button>` },
+    { k: "place", done: placed.length > 0, t: placed.length ? plural(placed.length, "student") + " invited · " + joined + " joined" : "Invite your students", s: placed.length ? "Send each student their own link. They land in " + code + " with nothing to find." : "Paste your sign-up list. Each student gets a personal link straight into " + code + ".", act: html`<button class=${"btn sm " + (placed.length ? "ghost" : "primary")} onClick=${() => org("place")}>${placed.length ? "Manage links" : "Add students"}</button>` },
+    { k: "olink", done: seen.olink, t: "Save your organizer link", s: "Your way back in as the organizer on your phone or another browser. Keep it private.",
+      act: olink ? html`<button class="btn sm soft" onClick=${() => copy(olink, "Organizer link copied. Save it somewhere private.", "olink")}><${Icon} name="copy" size=${15} />Copy</button>` : html`<button class="btn sm ghost" onClick=${showLink}>Show link</button>`,
+      extra: olink ? html`<code class="olink-code">${olink}</code>` : null },
+    { k: "demo", done: seen.demo, t: "Link for your TF and the submission", s: "A demo copy with example classmates, so anyone can try it without joining your real class.", act: html`<button class="btn sm ghost" onClick=${() => copy(demoLink, "Demo link copied", "demo")}><${Icon} name="copy" size=${15} />Copy</button>`, extra: html`<code class="olink-code">${demoLink}</code>` },
+    { k: "results", done: seen.results, t: "Watch the results", s: "Who posted, replied or reacted in cycle 1, and who came back in cycle 2. Updates live.", act: html`<button class="btn sm ghost" onClick=${() => org("results", "results")}>Open results</button>` },
+  ];
+  const left = steps.filter((x) => !x.done).length;
+  return html`<section class="card orgcheck">
+    <div class="orgcheck-h"><${Icon} name="target" size=${20} /><span class="grow"><b>Set up your study</b><small>${left ? left + " of " + steps.length + " left · only you see this" : "All set. Hide this whenever you like."}</small></span>
+      <button class="link" onClick=${() => mark("hidden")}>Hide</button></div>
+    ${steps.map((x) => html`<div class=${"orgstep" + (x.done ? " done" : "")} key=${x.k}>
+      <span class="orgstep-dot">${x.done ? html`<${Icon} name="check" size=${13} />` : null}</span>
+      <span class="grow orgstep-t"><b>${x.t}</b><small>${x.s}</small>${x.extra || null}</span>${x.act}</div>`)}
   </section>`;
 }
 

@@ -98,6 +98,7 @@ function Onboarding({ onDone }) {
   const [picked, setPicked] = useState(demo ? PRIYA.courses.map((id) => ({ id })) : placed);
   const [name, setName] = useState(demo ? PRIYA.name : (app.placement && app.placement.name) || app.viewerName || "");
   const [orgBusy, setOrgBusy] = useState(false);
+  const [setupChoice, setSetupChoice] = useState(null);
   const [color, setColor] = useState(demo ? PRIYA.color : SWATCHES[hash(app.uid || "") % SWATCHES.length]);
   const [photo, setPhoto] = useState("");
   const [year, setYear] = useState(demo ? PRIYA.year : "");
@@ -132,6 +133,7 @@ function Onboarding({ onDone }) {
       profile: { displayName: name.trim(), year, house, concentration: conc, color, photo, prompts: prompts.filter((p) => p.a && p.a.trim()), following, pledgeAt: Clock.now(), verified: verified ? (demo ? "harvard.edu" : app.web ? (app.isOrganizerReal ? "organizer" : "placed") : "org") : "" },
     });
     if (!ok) { setFailed(true); app.setArriving(false); return; }
+    if (app.web && app.isOrganizerReal) for (const p of picked) await app.seedClass(p.id);
     for (let n = 2; n <= buildLines.length; n++) await tick(n);
     setTimeout(() => go(OB_STEPS.indexOf("arrive")), 450);
   };
@@ -148,7 +150,20 @@ function Onboarding({ onDone }) {
 
   // ---- steps ----
   let body, cta = null;
-  if (key === "welcome") {
+  if (key === "welcome" && app.web && app.rt.hello && !app.rt.hello.hasOrganizer && !app.isOrganizerReal && setupChoice !== "student") {
+    // The first person to open a fresh deploy: almost always the person running the study.
+    body = html`<div class="ob-welcome">
+      <div class="ob-tiles" aria-hidden="true">${["stat110"].map((id) => html`<span key=${id} class="ob-tile" style=${{ "--r": "-6deg", "--y": "0px", "--d": "0ms" }}><${Tile} courseId=${id} size=${84} /></span>`)}</div>
+      <h1 class="ob-h1">Your class is live. You're the first one here.</h1>
+      <p class="ob-sub">If you're running this study, set the class up now. It takes a minute: you'll pick STAT 110, and Roster fills in the pset dates and the two experiment cycles for you.</p>
+      <ul class="ob-points">
+        <li><span class="ob-pi" style=${{ background: "var(--c2-solid)" }}><${Icon} name="userPlus" size=${18} fill=${true} /></span><div><b>Then invite students</b><span>Paste names and send each person their own link. Opening it puts them straight into the class chat.</span></div></li>
+        <li><span class="ob-pi" style=${{ background: "var(--c8-solid)" }}><${Icon} name="chart" size=${18} /></span><div><b>Watch the results</b><span>Who posted, replied or reacted in each pset cycle, measured against your 35% and 50% lines.</span></div></li>
+      </ul>
+    </div>`;
+    cta = html`<button class="btn primary lg block" disabled=${orgBusy} onClick=${async () => { setOrgBusy(true); const ok = await app.claimOrganizer(); setOrgBusy(false); if (ok) { setPicked((cur) => (cur.some((c) => c.id === "stat110") ? cur : [{ id: "stat110" }, ...cur])); next(); } }}>${orgBusy ? "Setting up…" : "I'm running this class"}</button>
+      <button class="btn ghost block" onClick=${() => setSetupChoice("student")}>I'm a student</button>`;
+  } else if (key === "welcome") {
     body = html`<div class="ob-welcome">
       <div class="ob-tiles" aria-hidden="true">${["stat110", "lifesci1a", "expos20", "gened1079"].map((id, i) => html`<span key=${id} class="ob-tile" style=${{ "--r": [-12, 5, -4, 11][i] + "deg", "--y": [10, -6, 14, 0][i] + "px", "--d": i * 90 + "ms" }}><${Tile} courseId=${id} size=${72} /></span>`)}</div>
       <h1 class="ob-h1">Your classes already have a group chat.</h1>
@@ -161,7 +176,7 @@ function Onboarding({ onDone }) {
     </div>`;
     cta = html`<button class="btn primary lg block" onClick=${next}>Get started</button>
       ${app.live ? html`<button class="btn ghost block" onClick=${() => app.switchMode("demo")}>Just looking? Open the demo class</button>` : null}
-      ${app.web && app.rt.hello && !app.rt.hello.hasOrganizer && !app.isOrganizerReal ? html`<button class="link center" disabled=${orgBusy} onClick=${async () => { setOrgBusy(true); await app.claimOrganizer(); setOrgBusy(false); }}>Running this study? Set this class up as the organizer</button>` : null}
+      ${app.rt.webStatic ? html`<a class="staticnote" href="setup.html"><${Icon} name="info" size=${16} /><span class="grow"><b>Running a study?</b> This copy has no class server yet, so only the demo works. Here's how to switch the live class on.</span><${Icon} name="chevronRight" size=${14} /></a>` : null}
       <p class="fine">Run by a student for ES30. Not affiliated with Harvard or course staff.</p>`;
   } else if (key === "classes") {
     body = html`<h1 class="ob-h">What are you taking?</h1><p class="ob-sub">Fall 2026. Pick every class you want a chat for.</p>

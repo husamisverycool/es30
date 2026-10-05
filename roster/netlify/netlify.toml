@@ -1,13 +1,16 @@
-# Roster: static page + one function (/api/*) with Netlify Blobs storage.
-# Deploy this folder with Git (base directory = this folder) or `netlify deploy`.
+# Roster: the page (index.html) plus one function (netlify/functions/api.mjs) that is the class's
+# shared database, stored in Netlify Blobs. The function is already bundled: nothing to install.
 [build]
   publish = "."
   functions = "netlify/functions"
-
-[functions]
-  node_bundler = "esbuild"
+  command = "echo Roster: nothing to build"
 
 [[headers]]
   for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/setup.html"
   [headers.values]
     Cache-Control = "no-cache"

@@ -1439,3 +1439,20 @@ select.input { padding-right: 34px; background-image: url("data:image/svg+xml,%3
 .olink { display: flex; align-items: center; gap: 8px; }
 .olink code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px/1.4 var(--font-mono); padding: 8px 10px; border-radius: 10px; background: var(--fill-4); }
 @media (max-width: 600px) { .plrow .btn.ghost { display: none; } }
+
+/* Web build: organizer setup checklist (Now) and the static-deploy note (onboarding) */
+.orgcheck { padding: 4px 16px 8px; border: 1px solid var(--separator); }
+.orgcheck-h { display: flex; align-items: center; gap: 10px; padding: 12px 0 8px; color: var(--accent); }
+.orgcheck-h b { display: block; font: var(--t-headline); color: var(--ink); }
+.orgcheck-h small { display: block; font: var(--t-footnote); color: var(--ink-2); }
+.orgstep { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: .5px solid var(--separator); }
+.orgstep-dot { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--ink-3); display: grid; place-items: center; color: #fff; }
+.orgstep.done .orgstep-dot { background: var(--success-fill); border-color: transparent; }
+.orgstep.done .orgstep-t b { color: var(--ink-2); }
+.orgstep-t { min-width: 0; }
+.orgstep-t b { display: block; font: var(--t-subhead); font-weight: 600; }
+.orgstep-t small { display: block; font: var(--t-footnote); color: var(--ink-2); }
+.olink-code { display: block; margin-top: 6px; font: 400 12px/1.4 var(--font-mono); padding: 6px 8px; border-radius: 8px; background: var(--fill-4); overflow-wrap: anywhere; user-select: all; }
+.orgstep .btn { flex: none; }
+.staticnote { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: var(--fill-4); color: var(--ink-2); font: var(--t-footnote); text-align: left; text-decoration: none; }
+.staticnote b { color: var(--ink); }
