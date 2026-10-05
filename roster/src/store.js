@@ -215,6 +215,13 @@ const LocalDB = (() => {
       _isEmpty: () => docs.size === 0,
       _reset() { docs.clear(); snaps.clear(); try { localStorage.removeItem(persistKey); } catch (_) {} schedule(); },
       _dump: () => [...docs],
+      // Sync helpers for the web build's server replica (not part of the capability surface).
+      _replace(entries) { docs.clear(); snaps.clear(); for (const [p, d] of entries) docs.set(p, freeze(clone(d))); schedule(); },
+      _apply(op) {
+        if (op.o === "set") write(op.p, op.d);
+        else if (op.o === "update") { if (docs.has(op.p)) write(op.p, merge(docs.get(op.p), op.d)); }
+        else if (op.o === "delete") write(op.p, undefined);
+      },
     };
   }
   return { create, newId };

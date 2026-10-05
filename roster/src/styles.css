@@ -1432,3 +1432,10 @@ select.input { padding-right: 34px; background-image: url("data:image/svg+xml,%3
 .desk .chiprow { flex-wrap: wrap; overflow: visible; }
 .desk ~ .toasts { left: auto; right: 32px; transform: none; bottom: 96px; justify-items: end; width: auto; }
 .ob ~ .toasts { bottom: 110px; }
+
+/* Web build: placement links */
+.plrow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: .5px solid var(--separator); }
+.plrow .prow-t small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.olink { display: flex; align-items: center; gap: 8px; }
+.olink code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px/1.4 var(--font-mono); padding: 8px 10px; border-radius: 10px; background: var(--fill-4); }
+@media (max-width: 600px) { .plrow .btn.ghost { display: none; } }

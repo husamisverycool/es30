@@ -78,7 +78,7 @@ function Session({ rt, mode, switchMode }) {
 
   const [profiles, setProfiles] = useState({});
   const [peers, setPeers] = useState([]);
-  const [placement, setPlacement] = useState(null);
+  const [placement, setPlacement] = useState(() => (!demo && rt.web && rt.placement) || null);
   const [replyTo, setReplyTo] = useState(null);
   const [lrVersion, setLrVersion] = useState(0);
   const [arriving, setArriving] = useState(false);
@@ -89,7 +89,8 @@ function Session({ rt, mode, switchMode }) {
   const presenceRef = useRef({ c: null, t: 0 });
 
   const membersById = useMemo(() => Object.fromEntries(members.map((m) => [m.id, m])), [members]);
-  const isOrganizerReal = !demo && !!rt.isOwner;
+  // Artifact: the page owner. Web build: whoever the class config names (set when they claimed it).
+  const isOrganizerReal = !demo && (!!rt.isOwner || !!(config && (config.organizers || []).includes(uid)));
   const organizerIds = demo ? [Demo.ORGANIZER] : [...new Set([...((config && config.organizers) || []), ...(isOrganizerReal ? [uid] : [])])];
   const customCourses = useMemo(() => {
     const out = {};
@@ -100,7 +101,7 @@ function Session({ rt, mode, switchMode }) {
   const tasks = useMemo(() => (savedList || []).filter((s) => s.type === "task"), [savedList]);
 
   useEffect(() => {
-    if (!demo && isOrganizerReal && config !== null && !((config && config.organizers) || []).includes(uid)) {
+    if (!demo && !rt.web && isOrganizerReal && config !== null && !((config && config.organizers) || []).includes(uid)) {
       db.doc("config/app").set({ ...(config || {}), organizers: [...((config && config.organizers) || []), uid] }).catch(() => {});
     }
   }, [config, isOrganizerReal]);
@@ -112,7 +113,7 @@ function Session({ rt, mode, switchMode }) {
   }, [members]);
   // Organizer placement: the organizer picks people, and they start already in those chats.
   useEffect(() => {
-    if (demo || !uid || myDoc === null || (myDoc && Object.keys(myDoc.courses || {}).length)) return;
+    if (demo || rt.web || !uid || myDoc === null || (myDoc && Object.keys(myDoc.courses || {}).length)) return;
     db.doc("placements/" + uid).get().then((s) => { if (s.exists) setPlacement(s.data()); }).catch(() => {});
   }, [myDoc === null]);
   useEffect(() => {
@@ -176,8 +177,11 @@ function Session({ rt, mode, switchMode }) {
     return n;
   });
 
+  // Web build: photos go to the server's photo store instead of inside documents.
+  const storeImage = async (img) => (img && db && db._upload && /^data:/.test(img.src || "") ? { ...img, src: await db._upload(img.src) } : img);
+  const storePhoto = async (body) => (body && body.photo && db && db._upload && /^data:/.test(body.photo) ? { ...body, photo: await db._upload(body.photo) } : body);
   const app = {
-    rt, mode, demo, live: !demo, liveOK, db, uid, canWrite, isOrganizerReal, isOrganizer: demo || isOrganizerReal, organizerIds,
+    rt, mode, demo, web: !demo && !!rt.web, live: !demo, liveOK, db, uid, canWrite, isOrganizerReal, isOrganizer: demo || isOrganizerReal, organizerIds,
     sample: rt.sample, downloads: rt.downloads, members, membersById, me: myDoc || null, myCourses, customCourses, online, person,
     feeds, hubs, fixes, saved, tasks, placement,
     viewerName: rt.me && rt.me.name, viewerAvatar: rt.me && rt.me.avatarUrl, viewerGuest: !!rt.guest, replyTo, setReplyTo, toast, write, lrVersion,
@@ -203,6 +207,7 @@ function Session({ rt, mode, switchMode }) {
     sendPhoto: async (cid, file, { caption, thread, tags }) => {
       let image;
       try { image = await Media.compress(file); } catch (_) { toast("That file isn't an image Roster can read. Try a JPG or PNG."); return false; }
+      try { image = await storeImage(image); } catch (e) { toast(errCopy(e)); return false; }
       const body = { by: uid, ts: now(), text: caption || "", thread: thread || "main", kind: "photo", image, reactions: {} };
       if (tags) body.tags = tags;
       return write(() => msgs(cid).add(body), "Photo sent");
@@ -249,7 +254,7 @@ function Session({ rt, mode, switchMode }) {
     // ---- notes ----
     addNote: async (cid, n, file) => {
       const body = { by: uid, ts: now(), lecture: n.lecture || 0, title: n.title, body: n.body || "", helpful: {} };
-      if (file) { try { body.image = await Media.compress(file); } catch (_) { /* skip image */ } }
+      if (file) { try { body.image = await storeImage(await Media.compress(file)); } catch (_) { /* skip image */ } }
       return write(() => db.collection("courses/" + cid + "/notes").add(body), "Notes shared with the class");
     },
     toggleHelpful: (cid, n) => write(() => db.doc("courses/" + cid + "/notes/" + n.id).update({ helpful: { [uid]: n.helpful && n.helpful[uid] ? 0 : now() } })),
@@ -298,14 +303,22 @@ function Session({ rt, mode, switchMode }) {
       const merged = { ...prev, ...(profile || {}) };
       // Placed in your House and class-year chats too, the way Saturn places you in your school.
       for (const sp of [Catalog.houseId(merged.house), Catalog.yearId(merged.year)]) if (sp && !courses[sp]) courses[sp] = t + 1;
-      const body = { ...merged, courses, courseCodes: codes, sections: { ...(prev.sections || {}), ...(sections || {}) }, joinedAt: prev.joinedAt || t, visits: prev.visits || {} };
+      let body = { ...merged, courses, courseCodes: codes, sections: { ...(prev.sections || {}), ...(sections || {}) }, joinedAt: prev.joinedAt || t, visits: prev.visits || {} };
       delete body.id;
+      if (!demo && rt.web && placement && placement.token && !prev.placement) {
+        // Claim the placement link first; if it was already claimed, this device becomes that student.
+        try { const c = await rt.remote.claimPlacement(placement.token); if (c.switched) { location.reload(); return false; } }
+        catch (e) { toast(errCopy(e)); return false; }
+        body.placement = placement.token;
+      }
+      try { body = await storePhoto(body); } catch (e) { toast(errCopy(e)); return false; }
       return write(() => db.doc("members/" + uid).set(body));
     },
-    updateProfile: (patch, ok) => {
+    updateProfile: async (patch, ok) => {
       const prev = myDoc || {};
-      const body = { ...prev, ...patch };
+      let body = { ...prev, ...patch };
       delete body.id;
+      try { body = await storePhoto(body); } catch (e) { toast(errCopy(e)); return false; }
       return write(() => db.doc("members/" + uid).set(body), ok || "Profile updated");
     },
     leaveCourse: (cid) => {
@@ -349,7 +362,7 @@ function Session({ rt, mode, switchMode }) {
       const body = { by: uid, ts: now(), cat: p.cat, title: p.title, body: p.body || "", reactions: {}, comments: 0 };
       if (p.cat === "event" || p.cat === "study") body.event = { at: p.at || 0, end: p.end || 0, where: p.where || "", rsvps: { [uid]: { s: "going", t: now() } } };
       if (p.cat === "market") body.price = p.price || "";
-      if (file) { try { body.image = await Media.compress(file); } catch (_) { /* skip */ } }
+      if (file) { try { body.image = await storeImage(await Media.compress(file)); } catch (_) { /* skip */ } }
       return write(() => db.collection("board").add(body), "Posted to the Board");
     },
     reactBoard: (p, e) => {
@@ -364,6 +377,16 @@ function Session({ rt, mode, switchMode }) {
     deleteBoard: (p) => write(() => db.doc("board/" + p.id).update({ deleted: now() }), "Post removed"),
 
     // ---- organizer ----
+    // Web build: personal placement links (?p=…) for a list of names.
+    createPlacements: async (people, courses) => {
+      if (!canWrite || !rt.remote) return null;
+      try { const r = await rt.remote.createPlacements(people, courses); rt.remote.resync(); return r.placements; }
+      catch (e) { toast(errCopy(e)); return null; }
+    },
+    claimOrganizer: async () => {
+      try { await rt.remote.claimOrganizer(); await rt.remote.resync(); toast("You're the organizer. Save your organizer link from Organizer tools → Placement."); return true; }
+      catch (e) { toast(e && e.code === "already_exists" ? "This class already has an organizer." : errCopy(e)); return false; }
+    },
     placePeople: async (ids, courses) => {
       let n = 0;
       for (const id of [...new Set(ids)]) {

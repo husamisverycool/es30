@@ -70,11 +70,15 @@ function Meter({ v, kill, ok, proj }) {
 function Results({ courseId }) {
   const app = useApp();
   const [data, refresh] = useCourseLog(courseId);
+  const [scope, setScope] = useState("placed");
   if (!data) return html`<div class="loading"><span class="dots"><i></i><i></i><i></i></span><span class="muted sm">Reading the chat log…</span></div>`;
   const cycles = (data.hub && data.hub.cycles) || [];
   if (cycles.length < 2) return html`<${Empty} icon="chart" title="Set your two pset cycles first">The research question compares cycle 1 with cycle 2. Add both under Dates.<//>`;
   const now = Clock.now();
-  const M = Metrics.compute({ courseId, members: data.members, messages: data.messages, fixes: data.fixes, checks: data.checks, recaps: data.recaps, cycles, organizerIds: app.organizerIds, now, stuck: data.stuck, notes: data.notes });
+  const placedOnly = scope === "placed" && data.members.some((m) => m.placement);
+  const members = placedOnly ? data.members.filter((m) => m.placement || app.organizerIds.includes(m.id)) : data.members;
+  const inScope = new Set(members.map((m) => m.id));
+  const M = Metrics.compute({ courseId, members, messages: data.messages, fixes: data.fixes, checks: data.checks, recaps: data.recaps, cycles, organizerIds: app.organizerIds, now, stuck: data.stuck, notes: data.notes });
   const [c1, c2] = M.cycles;
   const elapsed2 = c2.started ? Math.min(1, (now - c2.start) / (c2.end - c2.start)) : 0;
   const pace = c2.started && !c2.finished && c1.studentMsgs && elapsed2 > 0.02 ? c2.studentMsgs / elapsed2 / c1.studentMsgs : null;
@@ -82,7 +86,7 @@ function Results({ courseId }) {
   const days = [];
   for (let t = Sched.startOfDay(c1.start); t < c2.end; t = Sched.addDays(t, 1)) days.push({ t, n: 0, c2: t >= Sched.startOfDay(c2.start), future: t > now });
   for (const m of data.messages) {
-    if (!m.by || org.has(m.by) || m.deleted || !["text", "photo", "poll", "event"].includes(m.kind)) continue;
+    if (!m.by || org.has(m.by) || !inScope.has(m.by) || m.deleted || !["text", "photo", "poll", "event"].includes(m.kind)) continue;
     const i = days.findIndex((d, j) => m.ts >= d.t && (j === days.length - 1 || m.ts < days[j + 1].t));
     if (i >= 0) days[i].n++;
   }
@@ -93,7 +97,8 @@ function Results({ courseId }) {
   const WRITE = [["post", "Posts"], ["reply", "Replies"], ["fix", "Fixes"], ["note", "Notes"]];
   return html`<div class="dash">
     <div class="dash-q"><div class="grow"><b>Do placed students talk, and keep talking?</b>
-      <small>${M.placed} students placed in ${course(app, courseId).code} · ${c1.label} ${F.md.format(c1.start)}–${F.md.format(c1.end)} · ${c2.label} ${F.md.format(c2.start)}–${F.md.format(c2.end)} · organizer excluded</small></div>
+      <small>${plural(M.placed, "student")} ${placedOnly ? "placed by you in" : "in"} ${course(app, courseId).code} · ${c1.label} ${F.md.format(c1.start)}–${F.md.format(c1.end)} · ${c2.label} ${F.md.format(c2.start)}–${F.md.format(c2.end)} · organizer excluded</small></div>
+      ${data.members.some((m) => m.placement) ? html`<${Seg} value=${placedOnly ? "placed" : "all"} onChange=${setScope} label="Who counts" options=${[["placed", "Placed by you"], ["all", "Everyone who joined"]]} />` : null}
       <button class="btn sm ghost" onClick=${refresh}><${Icon} name="history" size=${15} />Refresh</button></div>
 
     <div class="kpis">
@@ -306,6 +311,10 @@ function HubEditor({ courseId }) {
 // ---- placement: pick people from the organization's directory (user.search) -------------------
 function Placement({ courseId }) {
   const app = useApp();
+  return app.web ? html`<${WebPlacement} courseId=${courseId} />` : html`<${DirectoryPlacement} courseId=${courseId} />`;
+}
+function DirectoryPlacement({ courseId }) {
+  const app = useApp();
   const [q, setQ] = useState("");
   const [hits, setHits] = useState([]);
   const [picked, setPicked] = useState([]);
@@ -344,6 +353,51 @@ function Placement({ courseId }) {
       <button class="btn primary" disabled=${!picked.length || busy} onClick=${go}>${busy ? "Placing…" : "Place " + plural(picked.length, "person", "people")}</button></div>
     ${done != null ? html`<div class=${"ob-banner" + (done ? "" : " warn")}><${Icon} name=${done ? "checkCircle" : "warning"} size=${18} />${done ? "Placed " + plural(done, "person", "people") + "." : "Nothing was placed."}</div>` : null}
     <p class="muted sm">Placing someone doesn't share the class with them. Share this page with them too (as a contributor) so they can open it.</p>
+  </div>`;
+}
+
+
+// Web build: one personal link per student (?p=…). Opening it lands them in the class chat,
+// already placed; the same link works on their other devices.
+function WebPlacement({ courseId }) {
+  const app = useApp();
+  const code = course(app, courseId).code;
+  const [text, setText] = useState("");
+  const [also, setAlso] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [olink, setOlink] = useState(null);
+  const list = (useCollection(() => app.db.collection("placements"), [app.db]) || []).filter((p) => (p.courses || []).includes(courseId)).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const others = app.myCourses.filter((c) => Catalog.isCourse(c) && c !== courseId);
+  const people = text.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const [n, ...rest] = l.split(/[,\t]/); return { name: n.trim(), contact: rest.join(",").trim() }; }).filter((p) => p.name);
+  const link = (t) => app.rt.remote.placementLink(t);
+  const copy = (txt, msg) => navigator.clipboard.writeText(txt).then(() => app.toast(msg || "Copied"), () => app.toast("Copy isn't available here. Select the text instead."));
+  const message = (p) => "Hi " + firstName(p.name) + "! You're in the " + code + " class chat on Roster. Open your link and you're in, no group link to find: " + link(p.id);
+  const joined = list.filter((p) => p.claimedBy).length;
+  const create = async () => {
+    setBusy(true);
+    const r = await app.createPlacements(people, [courseId, ...also]);
+    setBusy(false);
+    if (r) { setText(""); app.toast(plural(r.length, "link") + " created. Send each student their own."); }
+  };
+  return html`<div class="dash">
+    <p class="lead">This is the placement in your research question. Each student gets a personal link that opens straight into ${code}${also.length ? " and " + also.map((c) => course(app, c).code).join(", ") : ""}. No group link to find, no account to make.</p>
+    <label class="field"><span>Students, one per line <small>Name, or Name, email</small></span>
+      <textarea class="input mono" rows="5" value=${text} onInput=${(e) => setText(e.target.value)} placeholder=${"Priya Raman, priya_raman@college.harvard.edu\nDev Patel"}></textarea></label>
+    ${others.length ? html`<div class="field"><span>Also place them in</span><div class="chips">${others.map((c) => html`<button key=${c} class=${"chip" + (also.includes(c) ? " on" : "")} onClick=${() => setAlso(also.includes(c) ? also.filter((x) => x !== c) : [...also, c])}>${course(app, c).code}</button>`)}</div></div>` : null}
+    <div class="row-end"><span class="muted sm grow">Send each person their own link (email, text or DM). Don't post the links in a group.</span>
+      <button class="btn primary" disabled=${!people.length || busy} onClick=${create}>${busy ? "Creating…" : "Create " + plural(people.length, "link")}</button></div>
+    <section class="dcard"><div class="dcard-h"><b>Placement links · ${list.length}</b><span class="muted sm">${joined} of ${list.length} joined</span>
+      ${list.length ? html`<button class="btn sm ghost" onClick=${() => copy(list.map((p) => [p.name, p.contact, link(p.id)].filter(Boolean).join("\t")).join("\n"), "All links copied (name, contact, link)")}><${Icon} name="copy" size=${15} />Copy all</button>` : null}</div>
+      ${list.length ? list.map((p) => html`<div class="plrow" key=${p.id}>
+        <span class="grow prow-t"><b>${p.name}</b><small>${p.contact || link(p.id).replace(/^https?:\/\//, "")}</small></span>
+        <span class=${"pill sm " + (p.claimedBy ? "ok" : "")}>${p.claimedBy ? "Joined" : "Not yet"}</span>
+        <button class="btn sm ghost" onClick=${() => copy(message(p), "Message with " + firstName(p.name) + "'s link copied")}>Copy message</button>
+        <button class="iconbtn sm" onClick=${() => copy(link(p.id), "Link copied")} aria-label=${"Copy " + p.name + "'s link"}><${Icon} name="link" size=${16} /></button></div>`)
+      : html`<p class="muted sm">No one placed in ${code} yet.</p>`}</section>
+    <section class="dcard"><div class="dcard-h"><b>Your organizer link</b></div>
+      <p class="muted sm">Open it on another device or browser to be the organizer there. Keep it private: anyone with it can run this class.</p>
+      ${olink ? html`<div class="olink"><code>${olink}</code><button class="btn sm soft" onClick=${() => copy(olink, "Organizer link copied")}>Copy</button></div>`
+        : html`<button class="btn sm ghost" onClick=${async () => { try { setOlink(await app.rt.remote.organizerLink()); } catch (e) { app.toast(errCopy(e)); } }}><${Icon} name="eye" size=${15} />Show my organizer link</button>`}</section>
   </div>`;
 }
 

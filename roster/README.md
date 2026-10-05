@@ -13,6 +13,13 @@ A class group chat for Harvard courses. You add your classes and you're placed i
 
 Both links are private until you share them from the page's **Share** menu.
 
+### On Netlify (anyone with the link, no accounts)
+`netlify/` is a full site with its own class server: a Netlify Function plus Netlify Blobs.
+- **Live class:** each placed student gets a personal link that drops them into STAT 110 with no account. Everyone shares one real chat.
+- **Demo class:** for the TF, the same site at `?demo`.
+
+Deploy steps are in [netlify/DEPLOY.md](netlify/DEPLOY.md): import from GitHub with base directory `roster/netlify`, or use the Netlify CLI with `dist/roster-netlify.zip`. A drag-and-drop deploy is static-only, so it can only show the demo class.
+
 ## What the MVP does
 
 The core test is still placement: add your classes and you're in their chats. v2 builds the rest of a student's week around it, the way Saturn does. Each item lists the 2a element it implements.
@@ -85,6 +92,8 @@ node roster/build.mjs                       # writes dist/roster.html and dist/r
 # Playwright (Chromium). HTM_UMD = htm@3.1.1/preact/standalone.umd.js, KATEX_JS = katex@0.16.11/dist/katex.min.js
 node roster/test/demo-flow.mjs <outDir>     # onboarding + every screen, desktop and phone, light and dark, 86 screenshots
 node roster/test/live-mock.mjs <outDir>     # organizer + placed student + visitors on a mocked runtime, 30 checks
+node roster/test/netlify-flow.mjs <outDir>  # Netlify build against local Netlify Blobs: organizer, 2 placed students, 33 checks
+node roster/test/netlify-local.mjs 8888     # run the Netlify build locally (site + API)
 ```
 
 Source lives in `src/`:
@@ -92,4 +101,6 @@ Source lives in `src/`:
 - `metrics.js`: the research metrics and the CSV export.
 - `lib-*.js`: schedules, photos and math, and derived views (inbox, digest, weekly story, search, free time).
 - `demo.js`: the example class (142 example classmates, Stat 110 on Sat Oct 3, 2026).
-- `ui-*.js` and `app-session.js`: the UI, built with Preact and htm from jsDelivr. KaTeX renders math as MathML.
+- `ui-*.js` and `app-session.js`: the UI, built with Preact and htm. KaTeX renders math as MathML.
+- `remote.js`: the Netlify build's sync client. It keeps a replica of the class database and applies the server's ordered change log.
+- `../netlify/lib/api-core.mjs`: the Netlify Function. It holds the ordered op log on Netlify Blobs, placement links, organizer-only paths and private data.

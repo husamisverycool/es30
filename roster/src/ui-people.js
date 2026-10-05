@@ -111,7 +111,7 @@ function ProfileSheet({ uid, courseId, onClose }) {
       <div class="prof-cover" style=${{ "--av": p.color }}></div>
       <div class="prof-id">
         <span class="prof-av"><${Avatar} uid=${uid} size=${88} online=${app.online.has(uid)} /></span>
-        <h2>${p.name}${m.verified ? html`<span class="verified" title=${m.verified === "org" ? "Verified member of the class's organization" : "Verified " + m.verified + " account"}><${Icon} name="checkCircle" size=${18} fill=${true} /></span>` : null}</h2>
+        <h2>${p.name}${m.verified ? html`<span class="verified" title=${m.verified === "org" ? "Verified member of the class's organization" : m.verified === "placed" ? "Placed in this class by the organizer" : m.verified === "organizer" ? "Organizer" : "Verified " + m.verified + " account"}><${Icon} name="checkCircle" size=${18} fill=${true} /></span>` : null}</h2>
         ${app.demo && uid !== app.uid ? html`<span class="pill sm">Example classmate</span>` : null}
         ${st ? html`<span class="prof-status">${st.e} ${st.text} <small>until ${tShort(st.until)}</small></span>` : null}
       </div>

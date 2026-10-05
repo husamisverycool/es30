@@ -13,8 +13,9 @@ This file holds only facts. Per the AI policy, the analysis and the podcast refl
 > When Stat 110 students who are not in any class-wide chat get placed, with no link to find, into one course group chat with their classmates, do at least 35% of them post, reply or react at least once during the first pset cycle, and does the chat hold on to at least half of that activity during the second pset cycle without any prompting from me?
 
 **MVP links:**
-- Demo class (share as "anyone with the link"): https://claude.ai/artifact/8cBtNpHAs5YLLKPH2zdUMQ
-- Live class used for the test (shared with placed students): https://claude.ai/artifact/6RsBLnVaAejQqeh3haNjFV
+- Live class on Netlify (placed students open their personal links): _[https://your-site.netlify.app/]_
+- Demo class for anyone with the link (example classmates): _[https://your-site.netlify.app/?demo]_
+- Same app as a Claude artifact: demo https://claude.ai/artifact/8cBtNpHAs5YLLKPH2zdUMQ · live https://claude.ai/artifact/6RsBLnVaAejQqeh3haNjFV
 
 ## Idea 2: _[partner's idea]_
 **Owner:** _[partner]_ · **Driver:** _[name]_ · **Coach:** _[name]_

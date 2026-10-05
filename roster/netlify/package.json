@@ -1,0 +1,10 @@
+{
+  "name": "roster-netlify",
+  "private": true,
+  "type": "module",
+  "description": "Roster class chat MVP: static page plus a Netlify Function backed by Netlify Blobs.",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@netlify/blobs": "^11.1.3"
+  }
+}

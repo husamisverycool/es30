@@ -8,7 +8,22 @@ const Runtime = (() => {
   const use = (name) => (hasClaude() ? window.claude.use(name).catch(() => null) : Promise.resolve(null));
 
   async function boot() {
-    const forceDemo = !!window.ROSTER_FORCE_DEMO;
+    const params = new URLSearchParams(location.search);
+    const forceDemo = !!window.ROSTER_FORCE_DEMO || params.has("demo");
+    // Outside claude.ai (the Netlify build): a live class if this site has the /api function.
+    if (!hasClaude()) {
+      const web = forceDemo || typeof Remote === "undefined" ? null : await Remote.connect(params);
+      if (web) {
+        return {
+          forceDemo: false, live: true, web: true, db: web.db, user: null,
+          me: { id: web.uid, name: (web.placement && web.placement.name) || "", avatarUrl: "" },
+          uid: web.uid, isOwner: !!web.hello.isOrganizer, guest: false, canWrite: true,
+          sample: web.hello.ai ? Remote.sample : null, room: null, downloads: Remote.downloads, signedIn: true,
+          hello: web.hello, placement: web.placement, remote: web.remote,
+        };
+      }
+      return { forceDemo: true, live: false, web: false, webStatic: !forceDemo, db: null, user: null, me: null, uid: null, isOwner: false, guest: false, canWrite: false, sample: null, room: null, downloads: typeof Remote === "undefined" ? null : Remote.downloads, signedIn: false };
+    }
     const [db, user, sample, room, downloads] = await Promise.all([
       forceDemo ? null : use("db"), use("user"), use("sample"), forceDemo ? null : use("room"), use("downloads"),
     ]);

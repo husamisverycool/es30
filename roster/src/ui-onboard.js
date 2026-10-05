@@ -96,7 +96,8 @@ function Onboarding({ onDone }) {
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
   const [picked, setPicked] = useState(demo ? PRIYA.courses.map((id) => ({ id })) : placed);
-  const [name, setName] = useState(demo ? PRIYA.name : app.viewerName || "");
+  const [name, setName] = useState(demo ? PRIYA.name : (app.placement && app.placement.name) || app.viewerName || "");
+  const [orgBusy, setOrgBusy] = useState(false);
   const [color, setColor] = useState(demo ? PRIYA.color : SWATCHES[hash(app.uid || "") % SWATCHES.length]);
   const [photo, setPhoto] = useState("");
   const [year, setYear] = useState(demo ? PRIYA.year : "");
@@ -111,7 +112,8 @@ function Onboarding({ onDone }) {
   const [built, setBuilt] = useState(0);
   const [failed, setFailed] = useState(false);
   // Verified = a member of the organization that runs this class, not an invited guest.
-  const verified = demo || (!!app.uid && !app.viewerGuest);
+  // Artifact: a member of the class's organization. Web build: on the organizer's class list (a placement link).
+  const verified = demo || (app.web ? !!(app.placement && app.placement.token) || app.isOrganizerReal : !!app.uid && !app.viewerGuest);
   const key = OB_STEPS[step];
   const go = (n) => { setDir(n > step ? 1 : -1); setStep(n); };
   const next = () => go(step + 1), back = () => go(Math.max(0, step - 1));
@@ -127,7 +129,7 @@ function Onboarding({ onDone }) {
     const ok = await app.joinCourses({
       picked,
       sections,
-      profile: { displayName: name.trim(), year, house, concentration: conc, color, photo, prompts: prompts.filter((p) => p.a && p.a.trim()), following, pledgeAt: Clock.now(), verified: verified ? (demo ? "harvard.edu" : "org") : "" },
+      profile: { displayName: name.trim(), year, house, concentration: conc, color, photo, prompts: prompts.filter((p) => p.a && p.a.trim()), following, pledgeAt: Clock.now(), verified: verified ? (demo ? "harvard.edu" : app.web ? (app.isOrganizerReal ? "organizer" : "placed") : "org") : "" },
     });
     if (!ok) { setFailed(true); app.setArriving(false); return; }
     for (let n = 2; n <= buildLines.length; n++) await tick(n);
@@ -159,6 +161,7 @@ function Onboarding({ onDone }) {
     </div>`;
     cta = html`<button class="btn primary lg block" onClick=${next}>Get started</button>
       ${app.live ? html`<button class="btn ghost block" onClick=${() => app.switchMode("demo")}>Just looking? Open the demo class</button>` : null}
+      ${app.web && app.rt.hello && !app.rt.hello.hasOrganizer && !app.isOrganizerReal ? html`<button class="link center" disabled=${orgBusy} onClick=${async () => { setOrgBusy(true); await app.claimOrganizer(); setOrgBusy(false); }}>Running this study? Set this class up as the organizer</button>` : null}
       <p class="fine">Run by a student for ES30. Not affiliated with Harvard or course staff.</p>`;
   } else if (key === "classes") {
     body = html`<h1 class="ob-h">What are you taking?</h1><p class="ob-sub">Fall 2026. Pick every class you want a chat for.</p>
@@ -166,7 +169,15 @@ function Onboarding({ onDone }) {
       <${CoursePicker} picked=${picked} setPicked=${setPicked} />`;
     cta = html`<button class="btn primary lg block" disabled=${!picked.length} onClick=${next}>${picked.length ? "Continue with " + plural(picked.length, "class", "classes") : "Pick at least one class"}</button>`;
   } else if (key === "verify") {
-    body = html`<h1 class="ob-h">${verified ? "You're verified." : "You're joining as a guest"}</h1>
+    if (app.web) {
+      const placedName = app.placement && app.placement.name;
+      body = html`<h1 class="ob-h">${app.isOrganizerReal ? "You're the organizer." : verified ? "You're on the class list." : "Joining from the class link"}</h1>
+        <p class="ob-sub">${app.isOrganizerReal ? "You run this class page. Your organizer tools are in each class's chart button." : verified ? "The organizer added you, so classmates see a check next to your name." : "Anyone with this link can join. Your profile won't show the check."}</p>
+        <div class=${"verify" + (verified ? " ok" : "")}><span class="verify-ic"><${Icon} name=${verified ? "checkCircle" : "link"} size=${28} fill=${verified} /></span>
+          <div class="grow"><b>${placedName || name || "New classmate"}</b><small>${app.isOrganizerReal ? "Organizer" : verified ? "Placed by the organizer" + (app.placement.courses ? " · " + app.placement.courses.map((c) => course(app, c).code).join(", ") : "") : "Not on the organizer's list"}</small></div>
+          ${verified ? html`<span class="verify-ok"><${Icon} name="checkCircle" size=${22} fill=${true} /></span>` : null}</div>
+        <p class="muted sm">No account or password. This browser remembers you${verified ? "; your personal link works on any device" : ""}.</p>`;
+    } else body = html`<h1 class="ob-h">${verified ? "You're verified." : "You're joining as a guest"}</h1>
       <p class="ob-sub">${verified ? "Your account belongs to the school organization that runs this class, so classmates see a check next to your name." : "Your account was invited from outside the organization that runs this class."}</p>
       <div class=${"verify" + (verified ? " ok" : "")}><span class="verify-ic">${!demo && app.viewerAvatar ? html`<img src=${app.viewerAvatar} alt="" />` : html`<${Icon} name=${verified ? "checkCircle" : "user"} size=${28} fill=${verified} />`}</span>
         <div class="grow"><b>${demo ? PRIYA.name : app.viewerName || "Your account"}</b><small>${demo ? "Harvard College · example account" : verified ? "Member of this class's organization" : "Guest account"}</small></div>

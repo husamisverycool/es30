@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="Roster: every class you take already has a group chat. A demo class with example classmates; nothing you post leaves your browser.">
-<title>Roster Demo Class</title>
+<meta name="description" content="Roster: every class you take already has a group chat. Placed students land in their class chat with no link to find.">
+<title>Roster</title>
 <meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1446,6 +1446,13 @@ select.input { padding-right: 34px; background-image: url("data:image/svg+xml,%3
 .desk ~ .toasts { left: auto; right: 32px; transform: none; bottom: 96px; justify-items: end; width: auto; }
 .ob ~ .toasts { bottom: 110px; }
 
+/* Web build: placement links */
+.plrow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: .5px solid var(--separator); }
+.plrow .prow-t small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.olink { display: flex; align-items: center; gap: 8px; }
+.olink code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px/1.4 var(--font-mono); padding: 8px 10px; border-radius: 10px; background: var(--fill-4); }
+@media (max-width: 600px) { .plrow .btn.ghost { display: none; } }
+
 </style>
 </head>
 <body>
@@ -1458,7 +1465,7 @@ select.input { padding-right: 34px; background-image: url("data:image/svg+xml,%3
 <script src="vendor/htm-preact-standalone.umd.js"></script>
 <script src="vendor/katex.min.js"></script>
 <script>
-window.ROSTER_FORCE_DEMO = true;
+
 try { var t = localStorage.getItem("roster:theme"); t = t && JSON.parse(t); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
 // ---------------------------------------------------------------------------
 // LocalDB — an in-page store with the same surface as the artifact `db`
@@ -1677,9 +1684,206 @@ const LocalDB = (() => {
       _isEmpty: () => docs.size === 0,
       _reset() { docs.clear(); snaps.clear(); try { localStorage.removeItem(persistKey); } catch (_) {} schedule(); },
       _dump: () => [...docs],
+      // Sync helpers for the web build's server replica (not part of the capability surface).
+      _replace(entries) { docs.clear(); snaps.clear(); for (const [p, d] of entries) docs.set(p, freeze(clone(d))); schedule(); },
+      _apply(op) {
+        if (op.o === "set") write(op.p, op.d);
+        else if (op.o === "update") { if (docs.has(op.p)) write(op.p, merge(docs.get(op.p), op.d)); }
+        else if (op.o === "delete") write(op.p, undefined);
+      },
     };
   }
   return { create, newId };
+})();
+
+
+// ---------------------------------------------------------------------------
+// Web build: talks to the Netlify Function at /api. The browser keeps a full
+// replica of the class database (a LocalDB with the same API the app already
+// uses) and applies the server's ordered change log to it every few seconds.
+// Writes go to the server first, then into the replica; when the log comes
+// back, every op is re-applied in log order so all browsers converge.
+// No logins: a random id + key lives in this browser; a placement link or the
+// organizer's link restores that identity on another device.
+// ---------------------------------------------------------------------------
+const Remote = (() => {
+  const API = "api";
+  const ID_KEY = "roster:web:id", PL_KEY = "roster:web:placement";
+  const rnd = (n) => { const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"; return [...crypto.getRandomValues(new Uint8Array(n))].map((b) => abc[b % abc.length]).join(""); };
+  const load = (k) => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (_) { return null; } };
+  const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) { /* private mode */ } };
+  let ident = null;
+  const identity = () => ident || (ident = load(ID_KEY)) || (ident = { uid: "w_" + rnd(22), key: rnd(40) }, save(ID_KEY, ident), ident);
+  const adopt = (id) => { ident = { uid: id.uid, key: id.key }; save(ID_KEY, ident); };
+
+  async function call(method, path, body, opts) {
+    const id = identity();
+    const headers = { "x-roster-uid": id.uid, "x-roster-key": id.key };
+    let payload;
+    if (body instanceof Blob) { payload = body; headers["content-type"] = body.type; }
+    else if (body !== undefined) { payload = JSON.stringify(body); headers["content-type"] = "application/json"; }
+    let res;
+    try { res = await fetch(API + "/" + path, { method, headers, body: payload, cache: "no-store", signal: opts && opts.signal }); }
+    catch (e) { if (e && e.name === "AbortError") throw { code: "cancelled", message: "Stopped" }; throw { code: "unavailable", message: "Can't reach the class server." }; }
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw { code: (data && data.error && data.error.code) || (res.status === 403 ? "invalid_argument" : "unavailable"), message: (data && data.error && data.error.message) || "Request failed", status: res.status };
+    return data;
+  }
+  async function probe() {
+    try {
+      const res = await fetch(API + "/hello", { cache: "no-store", headers: ident || load(ID_KEY) ? { "x-roster-uid": identity().uid, "x-roster-key": identity().key } : {} });
+      if (!res.ok || !/json/.test(res.headers.get("content-type") || "")) return null;
+      const j = await res.json();
+      return j && j.roster ? j : null;
+    } catch (_) { return null; }
+  }
+
+  function createDB() {
+    const rep = LocalDB.create();
+    let cursor = 0, gapPolls = 0, timer = null, inflight = null, stopped = false;
+    const ready = (async () => { await pull(); })();
+    function applyAll(ops) {
+      ops.sort((a, b) => a.s - b.s);
+      for (const op of ops) {
+        if (op.s <= cursor) continue;
+        if (op.s > cursor + 1) {
+          if (++gapPolls < 3) break; // an op still being written; wait for it
+          gapPolls = 0;
+        }
+        if (!op.skip && !op.missing) rep._apply(op);
+        cursor = op.s;
+      }
+    }
+    async function pull() {
+      if (inflight) return inflight;
+      inflight = (async () => {
+        try {
+          const r = await call("GET", "sync?since=" + cursor);
+          if (r.full) { rep._replace(r.docs); cursor = r.seq; gapPolls = 0; }
+          applyAll(r.ops || []);
+        } finally { inflight = null; }
+      })();
+      return inflight;
+    }
+    // Poll fast while someone is active or the chat is moving, slower when idle, not when hidden
+    // (keeps a two-week class well inside Netlify's free function allowance).
+    let lastActive = Date.now(), lastChange = Date.now();
+    for (const ev of ["pointerdown", "keydown", "wheel", "touchstart"]) window.addEventListener(ev, () => { lastActive = Date.now(); }, { passive: true, capture: true });
+    const interval = () => { const idle = Date.now() - Math.max(lastActive, lastChange); return idle < 60e3 ? 3000 : idle < 300e3 ? 8000 : 20000; };
+    function loop() {
+      clearTimeout(timer);
+      if (stopped) return;
+      timer = setTimeout(async () => {
+        if (!document.hidden) { const before = cursor; try { await pull(); } catch (_) { /* offline; try again */ } if (cursor !== before) lastChange = Date.now(); }
+        loop();
+      }, document.hidden ? 30000 : interval());
+    }
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) pull().catch(() => {}); loop(); });
+    window.addEventListener("focus", () => pull().catch(() => {}));
+    ready.then(loop, loop);
+
+    async function send(op) {
+      await call("POST", "write", { ops: [op] });
+      rep._apply(op); // show it now; the log re-applies it in order
+      setTimeout(() => pull().catch(() => {}), 250);
+    }
+    function wrapDoc(path) {
+      const r = rep.doc(path);
+      return {
+        id: r.id, path,
+        get: () => r.get(),
+        onSnapshot: (next, err) => r.onSnapshot(next, err),
+        collection: (sub) => wrapCol(path + "/" + sub),
+        set: (d) => send({ o: "set", p: path, d }),
+        update: async (d) => {
+          const s = await r.get();
+          if (!s.exists) throw { code: "invalid_argument", message: "update needs an existing document" };
+          return send({ o: "update", p: path, d });
+        },
+        delete: () => send({ o: "delete", p: path }),
+      };
+    }
+    function wrapCol(path) {
+      const c = rep.collection(path);
+      return {
+        where: c.where, orderBy: c.orderBy, limit: c.limit, get: c.get, onSnapshot: c.onSnapshot, path,
+        doc: (id) => wrapDoc(path + "/" + (id || LocalDB.newId())),
+        async add(d) { const ref = wrapDoc(path + "/" + LocalDB.newId()); await ref.set(d); return ref; },
+      };
+    }
+    return {
+      doc: wrapDoc, collection: wrapCol, ready,
+      sync: () => pull(),
+      stop: () => { stopped = true; clearTimeout(timer); },
+      // Photos go to the server's photo store; documents keep a short URL.
+      async _upload(dataUrl) {
+        const blob = await (await fetch(dataUrl)).blob();
+        const r = await call("POST", "img", blob);
+        return r.src.replace(/^\//, "");
+      },
+      _dump: () => rep._dump(),
+    };
+  }
+
+  // Claude drafting through the server (only when the site has an API key).
+  const sample = {
+    async json(input, opts) {
+      const r = await call("POST", "draft", { prompt: String(input) }, opts).catch((e) => { throw e.code === "not_granted" || e.status === 501 ? { code: "not_granted", message: e.message } : e; });
+      const text = r.text || "";
+      if (opts && opts.onText) opts.onText({ text, delta: text });
+      const m = text.replace(/```(?:json)?/g, "").match(/\{[\s\S]*\}/);
+      try { return JSON.parse(m ? m[0] : text); } catch (_) { return null; }
+    },
+    limits: async () => ({ images: false }),
+  };
+  const downloads = {
+    async save({ filename, data }) {
+      const blob = data instanceof Blob ? data : new Blob([data], { type: /\.json$/.test(filename) ? "application/json" : /\.csv$/.test(filename) ? "text/csv" : "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    },
+  };
+
+  // Boot for the web build: null when there is no /api (a static-only deploy).
+  async function connect(params) {
+    if (location.protocol === "file:") return null;
+    let hello = await probe();
+    if (!hello) return null;
+    const strip = (k) => { try { const u = new URL(location.href); u.searchParams.delete(k); history.replaceState(null, "", u.pathname + (u.search ? u.search : "") + u.hash); } catch (_) { /* ignore */ } };
+    // ?o=<token>: the organizer's own link, on a new device.
+    const o = params.get("o");
+    if (o) { try { adopt(await call("POST", "restore", { token: o, kind: "o" })); } catch (_) { /* bad link: continue as a visitor */ } strip("o"); }
+    // ?p=<token>: a student's placement link. If that student already joined, this device becomes them.
+    let placement = load(PL_KEY);
+    const p = params.get("p");
+    if (p) {
+      try {
+        const r = await call("POST", "open-placement", { token: p });
+        if (r.restore) adopt(r.restore);
+        placement = { token: p, name: r.name, courses: r.courses };
+        save(PL_KEY, placement);
+      } catch (_) { /* invalid link */ }
+      strip("p");
+    }
+    identity();
+    hello = (await probe()) || hello;
+    const db = createDB();
+    try { await db.ready; } catch (_) { /* first sync failed; the loop retries */ }
+    return {
+      hello, db, placement, uid: identity().uid,
+      remote: {
+        claimOrganizer: () => call("POST", "claim-organizer"),
+        organizerLink: async () => { const r = await call("GET", "organizer-link"); return r.token ? location.origin + location.pathname + "?o=" + r.token : null; },
+        createPlacements: (people, courses) => call("POST", "placements", { people, courses }),
+        claimPlacement: async (token) => { const r = await call("POST", "claim-placement", { token }); if (r.restore) { adopt(r.restore); return { switched: true }; } return { ok: true }; },
+        placementLink: (token) => location.origin + location.pathname + "?p=" + token,
+        resync: () => db.sync(),
+      },
+    };
+  }
+  return { connect, probe, sample, downloads, identity };
 })();
 
 
@@ -1874,7 +2078,22 @@ const Runtime = (() => {
   const use = (name) => (hasClaude() ? window.claude.use(name).catch(() => null) : Promise.resolve(null));
 
   async function boot() {
-    const forceDemo = !!window.ROSTER_FORCE_DEMO;
+    const params = new URLSearchParams(location.search);
+    const forceDemo = !!window.ROSTER_FORCE_DEMO || params.has("demo");
+    // Outside claude.ai (the Netlify build): a live class if this site has the /api function.
+    if (!hasClaude()) {
+      const web = forceDemo || typeof Remote === "undefined" ? null : await Remote.connect(params);
+      if (web) {
+        return {
+          forceDemo: false, live: true, web: true, db: web.db, user: null,
+          me: { id: web.uid, name: (web.placement && web.placement.name) || "", avatarUrl: "" },
+          uid: web.uid, isOwner: !!web.hello.isOrganizer, guest: false, canWrite: true,
+          sample: web.hello.ai ? Remote.sample : null, room: null, downloads: Remote.downloads, signedIn: true,
+          hello: web.hello, placement: web.placement, remote: web.remote,
+        };
+      }
+      return { forceDemo: true, live: false, web: false, webStatic: !forceDemo, db: null, user: null, me: null, uid: null, isOwner: false, guest: false, canWrite: false, sample: null, room: null, downloads: typeof Remote === "undefined" ? null : Remote.downloads, signedIn: false };
+    }
     const [db, user, sample, room, downloads] = await Promise.all([
       forceDemo ? null : use("db"), use("user"), use("sample"), forceDemo ? null : use("room"), use("downloads"),
     ]);
@@ -4706,7 +4925,7 @@ function ProfileSheet({ uid, courseId, onClose }) {
       <div class="prof-cover" style=${{ "--av": p.color }}></div>
       <div class="prof-id">
         <span class="prof-av"><${Avatar} uid=${uid} size=${88} online=${app.online.has(uid)} /></span>
-        <h2>${p.name}${m.verified ? html`<span class="verified" title=${m.verified === "org" ? "Verified member of the class's organization" : "Verified " + m.verified + " account"}><${Icon} name="checkCircle" size=${18} fill=${true} /></span>` : null}</h2>
+        <h2>${p.name}${m.verified ? html`<span class="verified" title=${m.verified === "org" ? "Verified member of the class's organization" : m.verified === "placed" ? "Placed in this class by the organizer" : m.verified === "organizer" ? "Organizer" : "Verified " + m.verified + " account"}><${Icon} name="checkCircle" size=${18} fill=${true} /></span>` : null}</h2>
         ${app.demo && uid !== app.uid ? html`<span class="pill sm">Example classmate</span>` : null}
         ${st ? html`<span class="prof-status">${st.e} ${st.text} <small>until ${tShort(st.until)}</small></span>` : null}
       </div>
@@ -4935,7 +5154,9 @@ function YouView() {
         ${app.demo ? html`<${Row} icon="history" label="Reset the demo class" run=${() => app.open("confirm", { title: "Reset the demo?", body: "Everything you did in the demo is cleared and you'll start onboarding again.", cta: "Reset", danger: true, run: () => app.resetDemo() })} tint="var(--ink-3)" />` : null}
         ${app.demo && app.rt.live && app.rt.canWrite !== false && !Notice.liveDenied ? html`<${Row} icon="door" label="Join the live class" run=${() => app.switchMode("live")} tint="var(--school-fill)" />` : null}
         ${!app.demo ? html`<${Row} icon="play" label="Open the demo class" run=${() => app.switchMode("demo")} tint="var(--ink-3)" />` : null}
+        ${app.web && !app.isOrganizerReal && app.rt.hello && !app.rt.hello.hasOrganizer ? html`<${Row} icon="shield" label="Set up as the organizer" run=${() => app.claimOrganizer()} tint="var(--school-fill)" />` : null}
       </div>
+      ${app.rt.webStatic ? html`<p class="fine">This copy of Roster has no class server, so it only runs the demo class. To run the live class, deploy it with its Netlify Function (see DEPLOY.md).</p>` : null}
       <p class="fine">Roster · Harvard Fall 2026. Run by a student for ES30, not affiliated with Harvard or course staff.</p>
     </div></div>
   </div>`;
@@ -5425,7 +5646,8 @@ function Onboarding({ onDone }) {
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
   const [picked, setPicked] = useState(demo ? PRIYA.courses.map((id) => ({ id })) : placed);
-  const [name, setName] = useState(demo ? PRIYA.name : app.viewerName || "");
+  const [name, setName] = useState(demo ? PRIYA.name : (app.placement && app.placement.name) || app.viewerName || "");
+  const [orgBusy, setOrgBusy] = useState(false);
   const [color, setColor] = useState(demo ? PRIYA.color : SWATCHES[hash(app.uid || "") % SWATCHES.length]);
   const [photo, setPhoto] = useState("");
   const [year, setYear] = useState(demo ? PRIYA.year : "");
@@ -5440,7 +5662,8 @@ function Onboarding({ onDone }) {
   const [built, setBuilt] = useState(0);
   const [failed, setFailed] = useState(false);
   // Verified = a member of the organization that runs this class, not an invited guest.
-  const verified = demo || (!!app.uid && !app.viewerGuest);
+  // Artifact: a member of the class's organization. Web build: on the organizer's class list (a placement link).
+  const verified = demo || (app.web ? !!(app.placement && app.placement.token) || app.isOrganizerReal : !!app.uid && !app.viewerGuest);
   const key = OB_STEPS[step];
   const go = (n) => { setDir(n > step ? 1 : -1); setStep(n); };
   const next = () => go(step + 1), back = () => go(Math.max(0, step - 1));
@@ -5456,7 +5679,7 @@ function Onboarding({ onDone }) {
     const ok = await app.joinCourses({
       picked,
       sections,
-      profile: { displayName: name.trim(), year, house, concentration: conc, color, photo, prompts: prompts.filter((p) => p.a && p.a.trim()), following, pledgeAt: Clock.now(), verified: verified ? (demo ? "harvard.edu" : "org") : "" },
+      profile: { displayName: name.trim(), year, house, concentration: conc, color, photo, prompts: prompts.filter((p) => p.a && p.a.trim()), following, pledgeAt: Clock.now(), verified: verified ? (demo ? "harvard.edu" : app.web ? (app.isOrganizerReal ? "organizer" : "placed") : "org") : "" },
     });
     if (!ok) { setFailed(true); app.setArriving(false); return; }
     for (let n = 2; n <= buildLines.length; n++) await tick(n);
@@ -5488,6 +5711,7 @@ function Onboarding({ onDone }) {
     </div>`;
     cta = html`<button class="btn primary lg block" onClick=${next}>Get started</button>
       ${app.live ? html`<button class="btn ghost block" onClick=${() => app.switchMode("demo")}>Just looking? Open the demo class</button>` : null}
+      ${app.web && app.rt.hello && !app.rt.hello.hasOrganizer && !app.isOrganizerReal ? html`<button class="link center" disabled=${orgBusy} onClick=${async () => { setOrgBusy(true); await app.claimOrganizer(); setOrgBusy(false); }}>Running this study? Set this class up as the organizer</button>` : null}
       <p class="fine">Run by a student for ES30. Not affiliated with Harvard or course staff.</p>`;
   } else if (key === "classes") {
     body = html`<h1 class="ob-h">What are you taking?</h1><p class="ob-sub">Fall 2026. Pick every class you want a chat for.</p>
@@ -5495,7 +5719,15 @@ function Onboarding({ onDone }) {
       <${CoursePicker} picked=${picked} setPicked=${setPicked} />`;
     cta = html`<button class="btn primary lg block" disabled=${!picked.length} onClick=${next}>${picked.length ? "Continue with " + plural(picked.length, "class", "classes") : "Pick at least one class"}</button>`;
   } else if (key === "verify") {
-    body = html`<h1 class="ob-h">${verified ? "You're verified." : "You're joining as a guest"}</h1>
+    if (app.web) {
+      const placedName = app.placement && app.placement.name;
+      body = html`<h1 class="ob-h">${app.isOrganizerReal ? "You're the organizer." : verified ? "You're on the class list." : "Joining from the class link"}</h1>
+        <p class="ob-sub">${app.isOrganizerReal ? "You run this class page. Your organizer tools are in each class's chart button." : verified ? "The organizer added you, so classmates see a check next to your name." : "Anyone with this link can join. Your profile won't show the check."}</p>
+        <div class=${"verify" + (verified ? " ok" : "")}><span class="verify-ic"><${Icon} name=${verified ? "checkCircle" : "link"} size=${28} fill=${verified} /></span>
+          <div class="grow"><b>${placedName || name || "New classmate"}</b><small>${app.isOrganizerReal ? "Organizer" : verified ? "Placed by the organizer" + (app.placement.courses ? " · " + app.placement.courses.map((c) => course(app, c).code).join(", ") : "") : "Not on the organizer's list"}</small></div>
+          ${verified ? html`<span class="verify-ok"><${Icon} name="checkCircle" size=${22} fill=${true} /></span>` : null}</div>
+        <p class="muted sm">No account or password. This browser remembers you${verified ? "; your personal link works on any device" : ""}.</p>`;
+    } else body = html`<h1 class="ob-h">${verified ? "You're verified." : "You're joining as a guest"}</h1>
       <p class="ob-sub">${verified ? "Your account belongs to the school organization that runs this class, so classmates see a check next to your name." : "Your account was invited from outside the organization that runs this class."}</p>
       <div class=${"verify" + (verified ? " ok" : "")}><span class="verify-ic">${!demo && app.viewerAvatar ? html`<img src=${app.viewerAvatar} alt="" />` : html`<${Icon} name=${verified ? "checkCircle" : "user"} size=${28} fill=${verified} />`}</span>
         <div class="grow"><b>${demo ? PRIYA.name : app.viewerName || "Your account"}</b><small>${demo ? "Harvard College · example account" : verified ? "Member of this class's organization" : "Guest account"}</small></div>
@@ -5690,11 +5922,15 @@ function Meter({ v, kill, ok, proj }) {
 function Results({ courseId }) {
   const app = useApp();
   const [data, refresh] = useCourseLog(courseId);
+  const [scope, setScope] = useState("placed");
   if (!data) return html`<div class="loading"><span class="dots"><i></i><i></i><i></i></span><span class="muted sm">Reading the chat log…</span></div>`;
   const cycles = (data.hub && data.hub.cycles) || [];
   if (cycles.length < 2) return html`<${Empty} icon="chart" title="Set your two pset cycles first">The research question compares cycle 1 with cycle 2. Add both under Dates.<//>`;
   const now = Clock.now();
-  const M = Metrics.compute({ courseId, members: data.members, messages: data.messages, fixes: data.fixes, checks: data.checks, recaps: data.recaps, cycles, organizerIds: app.organizerIds, now, stuck: data.stuck, notes: data.notes });
+  const placedOnly = scope === "placed" && data.members.some((m) => m.placement);
+  const members = placedOnly ? data.members.filter((m) => m.placement || app.organizerIds.includes(m.id)) : data.members;
+  const inScope = new Set(members.map((m) => m.id));
+  const M = Metrics.compute({ courseId, members, messages: data.messages, fixes: data.fixes, checks: data.checks, recaps: data.recaps, cycles, organizerIds: app.organizerIds, now, stuck: data.stuck, notes: data.notes });
   const [c1, c2] = M.cycles;
   const elapsed2 = c2.started ? Math.min(1, (now - c2.start) / (c2.end - c2.start)) : 0;
   const pace = c2.started && !c2.finished && c1.studentMsgs && elapsed2 > 0.02 ? c2.studentMsgs / elapsed2 / c1.studentMsgs : null;
@@ -5702,7 +5938,7 @@ function Results({ courseId }) {
   const days = [];
   for (let t = Sched.startOfDay(c1.start); t < c2.end; t = Sched.addDays(t, 1)) days.push({ t, n: 0, c2: t >= Sched.startOfDay(c2.start), future: t > now });
   for (const m of data.messages) {
-    if (!m.by || org.has(m.by) || m.deleted || !["text", "photo", "poll", "event"].includes(m.kind)) continue;
+    if (!m.by || org.has(m.by) || !inScope.has(m.by) || m.deleted || !["text", "photo", "poll", "event"].includes(m.kind)) continue;
     const i = days.findIndex((d, j) => m.ts >= d.t && (j === days.length - 1 || m.ts < days[j + 1].t));
     if (i >= 0) days[i].n++;
   }
@@ -5713,7 +5949,8 @@ function Results({ courseId }) {
   const WRITE = [["post", "Posts"], ["reply", "Replies"], ["fix", "Fixes"], ["note", "Notes"]];
   return html`<div class="dash">
     <div class="dash-q"><div class="grow"><b>Do placed students talk, and keep talking?</b>
-      <small>${M.placed} students placed in ${course(app, courseId).code} · ${c1.label} ${F.md.format(c1.start)}–${F.md.format(c1.end)} · ${c2.label} ${F.md.format(c2.start)}–${F.md.format(c2.end)} · organizer excluded</small></div>
+      <small>${plural(M.placed, "student")} ${placedOnly ? "placed by you in" : "in"} ${course(app, courseId).code} · ${c1.label} ${F.md.format(c1.start)}–${F.md.format(c1.end)} · ${c2.label} ${F.md.format(c2.start)}–${F.md.format(c2.end)} · organizer excluded</small></div>
+      ${data.members.some((m) => m.placement) ? html`<${Seg} value=${placedOnly ? "placed" : "all"} onChange=${setScope} label="Who counts" options=${[["placed", "Placed by you"], ["all", "Everyone who joined"]]} />` : null}
       <button class="btn sm ghost" onClick=${refresh}><${Icon} name="history" size=${15} />Refresh</button></div>
 
     <div class="kpis">
@@ -5926,6 +6163,10 @@ function HubEditor({ courseId }) {
 // ---- placement: pick people from the organization's directory (user.search) -------------------
 function Placement({ courseId }) {
   const app = useApp();
+  return app.web ? html`<${WebPlacement} courseId=${courseId} />` : html`<${DirectoryPlacement} courseId=${courseId} />`;
+}
+function DirectoryPlacement({ courseId }) {
+  const app = useApp();
   const [q, setQ] = useState("");
   const [hits, setHits] = useState([]);
   const [picked, setPicked] = useState([]);
@@ -5964,6 +6205,51 @@ function Placement({ courseId }) {
       <button class="btn primary" disabled=${!picked.length || busy} onClick=${go}>${busy ? "Placing…" : "Place " + plural(picked.length, "person", "people")}</button></div>
     ${done != null ? html`<div class=${"ob-banner" + (done ? "" : " warn")}><${Icon} name=${done ? "checkCircle" : "warning"} size=${18} />${done ? "Placed " + plural(done, "person", "people") + "." : "Nothing was placed."}</div>` : null}
     <p class="muted sm">Placing someone doesn't share the class with them. Share this page with them too (as a contributor) so they can open it.</p>
+  </div>`;
+}
+
+
+// Web build: one personal link per student (?p=…). Opening it lands them in the class chat,
+// already placed; the same link works on their other devices.
+function WebPlacement({ courseId }) {
+  const app = useApp();
+  const code = course(app, courseId).code;
+  const [text, setText] = useState("");
+  const [also, setAlso] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [olink, setOlink] = useState(null);
+  const list = (useCollection(() => app.db.collection("placements"), [app.db]) || []).filter((p) => (p.courses || []).includes(courseId)).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const others = app.myCourses.filter((c) => Catalog.isCourse(c) && c !== courseId);
+  const people = text.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const [n, ...rest] = l.split(/[,\t]/); return { name: n.trim(), contact: rest.join(",").trim() }; }).filter((p) => p.name);
+  const link = (t) => app.rt.remote.placementLink(t);
+  const copy = (txt, msg) => navigator.clipboard.writeText(txt).then(() => app.toast(msg || "Copied"), () => app.toast("Copy isn't available here. Select the text instead."));
+  const message = (p) => "Hi " + firstName(p.name) + "! You're in the " + code + " class chat on Roster. Open your link and you're in, no group link to find: " + link(p.id);
+  const joined = list.filter((p) => p.claimedBy).length;
+  const create = async () => {
+    setBusy(true);
+    const r = await app.createPlacements(people, [courseId, ...also]);
+    setBusy(false);
+    if (r) { setText(""); app.toast(plural(r.length, "link") + " created. Send each student their own."); }
+  };
+  return html`<div class="dash">
+    <p class="lead">This is the placement in your research question. Each student gets a personal link that opens straight into ${code}${also.length ? " and " + also.map((c) => course(app, c).code).join(", ") : ""}. No group link to find, no account to make.</p>
+    <label class="field"><span>Students, one per line <small>Name, or Name, email</small></span>
+      <textarea class="input mono" rows="5" value=${text} onInput=${(e) => setText(e.target.value)} placeholder=${"Priya Raman, priya_raman@college.harvard.edu\nDev Patel"}></textarea></label>
+    ${others.length ? html`<div class="field"><span>Also place them in</span><div class="chips">${others.map((c) => html`<button key=${c} class=${"chip" + (also.includes(c) ? " on" : "")} onClick=${() => setAlso(also.includes(c) ? also.filter((x) => x !== c) : [...also, c])}>${course(app, c).code}</button>`)}</div></div>` : null}
+    <div class="row-end"><span class="muted sm grow">Send each person their own link (email, text or DM). Don't post the links in a group.</span>
+      <button class="btn primary" disabled=${!people.length || busy} onClick=${create}>${busy ? "Creating…" : "Create " + plural(people.length, "link")}</button></div>
+    <section class="dcard"><div class="dcard-h"><b>Placement links · ${list.length}</b><span class="muted sm">${joined} of ${list.length} joined</span>
+      ${list.length ? html`<button class="btn sm ghost" onClick=${() => copy(list.map((p) => [p.name, p.contact, link(p.id)].filter(Boolean).join("\t")).join("\n"), "All links copied (name, contact, link)")}><${Icon} name="copy" size=${15} />Copy all</button>` : null}</div>
+      ${list.length ? list.map((p) => html`<div class="plrow" key=${p.id}>
+        <span class="grow prow-t"><b>${p.name}</b><small>${p.contact || link(p.id).replace(/^https?:\/\//, "")}</small></span>
+        <span class=${"pill sm " + (p.claimedBy ? "ok" : "")}>${p.claimedBy ? "Joined" : "Not yet"}</span>
+        <button class="btn sm ghost" onClick=${() => copy(message(p), "Message with " + firstName(p.name) + "'s link copied")}>Copy message</button>
+        <button class="iconbtn sm" onClick=${() => copy(link(p.id), "Link copied")} aria-label=${"Copy " + p.name + "'s link"}><${Icon} name="link" size=${16} /></button></div>`)
+      : html`<p class="muted sm">No one placed in ${code} yet.</p>`}</section>
+    <section class="dcard"><div class="dcard-h"><b>Your organizer link</b></div>
+      <p class="muted sm">Open it on another device or browser to be the organizer there. Keep it private: anyone with it can run this class.</p>
+      ${olink ? html`<div class="olink"><code>${olink}</code><button class="btn sm soft" onClick=${() => copy(olink, "Organizer link copied")}>Copy</button></div>`
+        : html`<button class="btn sm ghost" onClick=${async () => { try { setOlink(await app.rt.remote.organizerLink()); } catch (e) { app.toast(errCopy(e)); } }}><${Icon} name="eye" size=${15} />Show my organizer link</button>`}</section>
   </div>`;
 }
 
@@ -6294,7 +6580,7 @@ function Session({ rt, mode, switchMode }) {
 
   const [profiles, setProfiles] = useState({});
   const [peers, setPeers] = useState([]);
-  const [placement, setPlacement] = useState(null);
+  const [placement, setPlacement] = useState(() => (!demo && rt.web && rt.placement) || null);
   const [replyTo, setReplyTo] = useState(null);
   const [lrVersion, setLrVersion] = useState(0);
   const [arriving, setArriving] = useState(false);
@@ -6305,7 +6591,8 @@ function Session({ rt, mode, switchMode }) {
   const presenceRef = useRef({ c: null, t: 0 });
 
   const membersById = useMemo(() => Object.fromEntries(members.map((m) => [m.id, m])), [members]);
-  const isOrganizerReal = !demo && !!rt.isOwner;
+  // Artifact: the page owner. Web build: whoever the class config names (set when they claimed it).
+  const isOrganizerReal = !demo && (!!rt.isOwner || !!(config && (config.organizers || []).includes(uid)));
   const organizerIds = demo ? [Demo.ORGANIZER] : [...new Set([...((config && config.organizers) || []), ...(isOrganizerReal ? [uid] : [])])];
   const customCourses = useMemo(() => {
     const out = {};
@@ -6316,7 +6603,7 @@ function Session({ rt, mode, switchMode }) {
   const tasks = useMemo(() => (savedList || []).filter((s) => s.type === "task"), [savedList]);
 
   useEffect(() => {
-    if (!demo && isOrganizerReal && config !== null && !((config && config.organizers) || []).includes(uid)) {
+    if (!demo && !rt.web && isOrganizerReal && config !== null && !((config && config.organizers) || []).includes(uid)) {
       db.doc("config/app").set({ ...(config || {}), organizers: [...((config && config.organizers) || []), uid] }).catch(() => {});
     }
   }, [config, isOrganizerReal]);
@@ -6328,7 +6615,7 @@ function Session({ rt, mode, switchMode }) {
   }, [members]);
   // Organizer placement: the organizer picks people, and they start already in those chats.
   useEffect(() => {
-    if (demo || !uid || myDoc === null || (myDoc && Object.keys(myDoc.courses || {}).length)) return;
+    if (demo || rt.web || !uid || myDoc === null || (myDoc && Object.keys(myDoc.courses || {}).length)) return;
     db.doc("placements/" + uid).get().then((s) => { if (s.exists) setPlacement(s.data()); }).catch(() => {});
   }, [myDoc === null]);
   useEffect(() => {
@@ -6392,8 +6679,11 @@ function Session({ rt, mode, switchMode }) {
     return n;
   });
 
+  // Web build: photos go to the server's photo store instead of inside documents.
+  const storeImage = async (img) => (img && db && db._upload && /^data:/.test(img.src || "") ? { ...img, src: await db._upload(img.src) } : img);
+  const storePhoto = async (body) => (body && body.photo && db && db._upload && /^data:/.test(body.photo) ? { ...body, photo: await db._upload(body.photo) } : body);
   const app = {
-    rt, mode, demo, live: !demo, liveOK, db, uid, canWrite, isOrganizerReal, isOrganizer: demo || isOrganizerReal, organizerIds,
+    rt, mode, demo, web: !demo && !!rt.web, live: !demo, liveOK, db, uid, canWrite, isOrganizerReal, isOrganizer: demo || isOrganizerReal, organizerIds,
     sample: rt.sample, downloads: rt.downloads, members, membersById, me: myDoc || null, myCourses, customCourses, online, person,
     feeds, hubs, fixes, saved, tasks, placement,
     viewerName: rt.me && rt.me.name, viewerAvatar: rt.me && rt.me.avatarUrl, viewerGuest: !!rt.guest, replyTo, setReplyTo, toast, write, lrVersion,
@@ -6419,6 +6709,7 @@ function Session({ rt, mode, switchMode }) {
     sendPhoto: async (cid, file, { caption, thread, tags }) => {
       let image;
       try { image = await Media.compress(file); } catch (_) { toast("That file isn't an image Roster can read. Try a JPG or PNG."); return false; }
+      try { image = await storeImage(image); } catch (e) { toast(errCopy(e)); return false; }
       const body = { by: uid, ts: now(), text: caption || "", thread: thread || "main", kind: "photo", image, reactions: {} };
       if (tags) body.tags = tags;
       return write(() => msgs(cid).add(body), "Photo sent");
@@ -6465,7 +6756,7 @@ function Session({ rt, mode, switchMode }) {
     // ---- notes ----
     addNote: async (cid, n, file) => {
       const body = { by: uid, ts: now(), lecture: n.lecture || 0, title: n.title, body: n.body || "", helpful: {} };
-      if (file) { try { body.image = await Media.compress(file); } catch (_) { /* skip image */ } }
+      if (file) { try { body.image = await storeImage(await Media.compress(file)); } catch (_) { /* skip image */ } }
       return write(() => db.collection("courses/" + cid + "/notes").add(body), "Notes shared with the class");
     },
     toggleHelpful: (cid, n) => write(() => db.doc("courses/" + cid + "/notes/" + n.id).update({ helpful: { [uid]: n.helpful && n.helpful[uid] ? 0 : now() } })),
@@ -6514,14 +6805,22 @@ function Session({ rt, mode, switchMode }) {
       const merged = { ...prev, ...(profile || {}) };
       // Placed in your House and class-year chats too, the way Saturn places you in your school.
       for (const sp of [Catalog.houseId(merged.house), Catalog.yearId(merged.year)]) if (sp && !courses[sp]) courses[sp] = t + 1;
-      const body = { ...merged, courses, courseCodes: codes, sections: { ...(prev.sections || {}), ...(sections || {}) }, joinedAt: prev.joinedAt || t, visits: prev.visits || {} };
+      let body = { ...merged, courses, courseCodes: codes, sections: { ...(prev.sections || {}), ...(sections || {}) }, joinedAt: prev.joinedAt || t, visits: prev.visits || {} };
       delete body.id;
+      if (!demo && rt.web && placement && placement.token && !prev.placement) {
+        // Claim the placement link first; if it was already claimed, this device becomes that student.
+        try { const c = await rt.remote.claimPlacement(placement.token); if (c.switched) { location.reload(); return false; } }
+        catch (e) { toast(errCopy(e)); return false; }
+        body.placement = placement.token;
+      }
+      try { body = await storePhoto(body); } catch (e) { toast(errCopy(e)); return false; }
       return write(() => db.doc("members/" + uid).set(body));
     },
-    updateProfile: (patch, ok) => {
+    updateProfile: async (patch, ok) => {
       const prev = myDoc || {};
-      const body = { ...prev, ...patch };
+      let body = { ...prev, ...patch };
       delete body.id;
+      try { body = await storePhoto(body); } catch (e) { toast(errCopy(e)); return false; }
       return write(() => db.doc("members/" + uid).set(body), ok || "Profile updated");
     },
     leaveCourse: (cid) => {
@@ -6565,7 +6864,7 @@ function Session({ rt, mode, switchMode }) {
       const body = { by: uid, ts: now(), cat: p.cat, title: p.title, body: p.body || "", reactions: {}, comments: 0 };
       if (p.cat === "event" || p.cat === "study") body.event = { at: p.at || 0, end: p.end || 0, where: p.where || "", rsvps: { [uid]: { s: "going", t: now() } } };
       if (p.cat === "market") body.price = p.price || "";
-      if (file) { try { body.image = await Media.compress(file); } catch (_) { /* skip */ } }
+      if (file) { try { body.image = await storeImage(await Media.compress(file)); } catch (_) { /* skip */ } }
       return write(() => db.collection("board").add(body), "Posted to the Board");
     },
     reactBoard: (p, e) => {
@@ -6580,6 +6879,16 @@ function Session({ rt, mode, switchMode }) {
     deleteBoard: (p) => write(() => db.doc("board/" + p.id).update({ deleted: now() }), "Post removed"),
 
     // ---- organizer ----
+    // Web build: personal placement links (?p=…) for a list of names.
+    createPlacements: async (people, courses) => {
+      if (!canWrite || !rt.remote) return null;
+      try { const r = await rt.remote.createPlacements(people, courses); rt.remote.resync(); return r.placements; }
+      catch (e) { toast(errCopy(e)); return null; }
+    },
+    claimOrganizer: async () => {
+      try { await rt.remote.claimOrganizer(); await rt.remote.resync(); toast("You're the organizer. Save your organizer link from Organizer tools → Placement."); return true; }
+      catch (e) { toast(e && e.code === "already_exists" ? "This class already has an organizer." : errCopy(e)); return false; }
+    },
     placePeople: async (ids, courses) => {
       let n = 0;
       for (const id of [...new Set(ids)]) {

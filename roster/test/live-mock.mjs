@@ -212,7 +212,7 @@ await A2.click('button[aria-label="Organizer tools"]');
 await A2.waitForSelector(".kpis");
 await shot(A2, "c1-results");
 const txt = await A2.locator(".dash").innerText();
-check(/1 students placed/.test(txt), "results count 1 placed student (organizer excluded)");
+check(/1 student in STAT 110/.test(txt), "results count 1 student (organizer excluded)");
 await A2.click(".tabs.inset >> text=Export");
 await A2.waitForSelector("text=Event log · CSV");
 await A2.click("text=Event log · CSV");

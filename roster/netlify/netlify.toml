@@ -1,0 +1,13 @@
+# Roster: static page + one function (/api/*) with Netlify Blobs storage.
+# Deploy this folder with Git (base directory = this folder) or `netlify deploy`.
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"

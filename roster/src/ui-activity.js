@@ -162,7 +162,9 @@ function YouView() {
         ${app.demo ? html`<${Row} icon="history" label="Reset the demo class" run=${() => app.open("confirm", { title: "Reset the demo?", body: "Everything you did in the demo is cleared and you'll start onboarding again.", cta: "Reset", danger: true, run: () => app.resetDemo() })} tint="var(--ink-3)" />` : null}
         ${app.demo && app.rt.live && app.rt.canWrite !== false && !Notice.liveDenied ? html`<${Row} icon="door" label="Join the live class" run=${() => app.switchMode("live")} tint="var(--school-fill)" />` : null}
         ${!app.demo ? html`<${Row} icon="play" label="Open the demo class" run=${() => app.switchMode("demo")} tint="var(--ink-3)" />` : null}
+        ${app.web && !app.isOrganizerReal && app.rt.hello && !app.rt.hello.hasOrganizer ? html`<${Row} icon="shield" label="Set up as the organizer" run=${() => app.claimOrganizer()} tint="var(--school-fill)" />` : null}
       </div>
+      ${app.rt.webStatic ? html`<p class="fine">This copy of Roster has no class server, so it only runs the demo class. To run the live class, deploy it with its Netlify Function (see DEPLOY.md).</p>` : null}
       <p class="fine">Roster · Harvard Fall 2026. Run by a student for ES30, not affiliated with Harvard or course staff.</p>
     </div></div>
   </div>`;
